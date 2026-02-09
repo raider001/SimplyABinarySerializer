@@ -34,6 +34,10 @@ class FastByteWriter {
         return pos;
     }
 
+    byte[] getBuffer() {
+        return buf;
+    }
+
     void writeByte(int v) {
         buf[pos++] = (byte) v;
     }
@@ -90,13 +94,23 @@ class FastByteWriter {
     }
 
     void writeBytes(byte[] src, int len) {
+        ensureCapacity(len);
         System.arraycopy(src, 0, buf, pos, len);
         pos += len;
     }
 
     void writeBytes(byte[] src) {
+        ensureCapacity(src.length);
         System.arraycopy(src, 0, buf, pos, src.length);
         pos += src.length;
+    }
+
+    private void ensureCapacity(int additional) {
+        if (pos + additional > buf.length) {
+            byte[] newBuf = new byte[Math.max(buf.length * 2, pos + additional)];
+            System.arraycopy(buf, 0, newBuf, 0, pos);
+            buf = newBuf;
+        }
     }
 
     void writeString(byte[] strBytes) {

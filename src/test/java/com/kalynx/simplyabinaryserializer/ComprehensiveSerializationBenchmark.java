@@ -25,8 +25,8 @@ import java.util.Map;
  */
 public class ComprehensiveSerializationBenchmark {
 
-    private static final int WARMUP_ITERATIONS = 5000;
-    private static final int BENCHMARK_ITERATIONS = 50000;
+    private static final int WARMUP_ITERATIONS = 50_000;
+    private static final int BENCHMARK_ITERATIONS = 1_000_000;
 
     private BinarySerializer binarySerializer;
     private BinaryDeserializer binaryDeserializer;
@@ -76,7 +76,7 @@ public class ComprehensiveSerializationBenchmark {
     @Test
     public void benchmark_SimpleObject_AllLibraries() throws Exception {
         System.out.println("\n" + "=".repeat(100));
-        System.out.println("SIMPLE OBJECT BENCHMARK - Serialization + Deserialization (50K unique objects)");
+        System.out.println("SIMPLE OBJECT BENCHMARK - Serialization + Deserialization (1M unique objects)");
         System.out.println("=".repeat(100));
 
         // Warmup
@@ -98,7 +98,7 @@ public class ComprehensiveSerializationBenchmark {
     @Test
     public void benchmark_ComplexObject_AllLibraries() throws Exception {
         System.out.println("\n" + "=".repeat(100));
-        System.out.println("COMPLEX OBJECT BENCHMARK - Serialization + Deserialization (10K unique objects)");
+        System.out.println("COMPLEX OBJECT BENCHMARK - Serialization + Deserialization (200K unique objects)");
         System.out.println("=".repeat(100));
 
         // Warmup
@@ -120,7 +120,7 @@ public class ComprehensiveSerializationBenchmark {
     @Test
     public void benchmark_ListSerialization_AllLibraries() throws Exception {
         System.out.println("\n" + "=".repeat(100));
-        System.out.println("LIST SERIALIZATION BENCHMARK - Various list types (10K unique objects)");
+        System.out.println("LIST SERIALIZATION BENCHMARK - Various list types (200K unique objects)");
         System.out.println("=".repeat(100));
 
         // Warmup
@@ -142,7 +142,7 @@ public class ComprehensiveSerializationBenchmark {
     @Test
     public void benchmark_MapSerialization_AllLibraries() throws Exception {
         System.out.println("\n" + "=".repeat(100));
-        System.out.println("MAP SERIALIZATION BENCHMARK - Various map types (10K unique objects)");
+        System.out.println("MAP SERIALIZATION BENCHMARK - Various map types (200K unique objects)");
         System.out.println("=".repeat(100));
 
         // Warmup
@@ -164,7 +164,7 @@ public class ComprehensiveSerializationBenchmark {
     @Test
     public void benchmark_DeepNestedObject_AllLibraries() throws Exception {
         System.out.println("\n" + "=".repeat(100));
-        System.out.println("DEEP NESTED OBJECT BENCHMARK - 5 levels deep (5K unique objects)");
+        System.out.println("DEEP NESTED OBJECT BENCHMARK - 5 levels deep (100K unique objects)");
         System.out.println("=".repeat(100));
 
         // Warmup
@@ -198,7 +198,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkTypedSimple() throws Exception {
@@ -216,7 +216,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkJackson() throws Exception {
@@ -234,7 +234,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkKryo() throws Exception {
@@ -258,7 +258,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkMessagePack() throws Exception {
@@ -276,7 +276,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     // Complex object benchmarks
@@ -296,7 +296,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkTypedComplex() throws Exception {
@@ -315,7 +315,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkJacksonComplex() throws Exception {
@@ -334,7 +334,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkKryoComplex() throws Exception {
@@ -359,7 +359,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkMessagePackComplex() throws Exception {
@@ -378,7 +378,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     // List benchmarks
@@ -398,7 +398,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkTypedList() throws Exception {
@@ -417,7 +417,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkJacksonList() throws Exception {
@@ -436,7 +436,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkKryoList() throws Exception {
@@ -461,7 +461,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkMessagePackList() throws Exception {
@@ -480,7 +480,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     // Map benchmarks
@@ -514,7 +514,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkTypedMap() throws Exception {
@@ -533,7 +533,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkJacksonMap() throws Exception {
@@ -552,7 +552,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkKryoMap() throws Exception {
@@ -577,7 +577,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkMessagePackMap() throws Exception {
@@ -596,7 +596,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     // Deep nested object benchmarks
@@ -616,7 +616,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkTypedDeep() throws Exception {
@@ -635,7 +635,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkJacksonDeep() throws Exception {
@@ -654,7 +654,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Jackson (JSON)", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkKryoDeep() throws Exception {
@@ -679,7 +679,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("Kryo", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private BenchmarkResult benchmarkMessagePackDeep() throws Exception {
@@ -698,7 +698,7 @@ public class ComprehensiveSerializationBenchmark {
         }
         long deserTime = System.nanoTime() - deserStart;
 
-        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length);
+        return new BenchmarkResult("MessagePack", serTime, deserTime, data[0].length, BENCHMARK_ITERATIONS);
     }
 
     private void warmupAll(SimpleObject obj) throws Exception {
@@ -827,35 +827,39 @@ public class ComprehensiveSerializationBenchmark {
     }
 
     private void printTable(String name, BenchmarkResult... results) {
-        System.out.println("\n" + name + " Results:");
-        System.out.println("-".repeat(110));
-        System.out.printf("%-20s %15s %15s %15s %12s %15s\n",
-            "Library", "Serialize (ms)", "Deserialize (ms)", "Total (ms)", "Size (bytes)", "Size vs Binary");
-        System.out.println("-".repeat(110));
+        System.out.println("\n" + name + " Results (" + String.format("%,d", results[0].iterations) + " iterations):");
+        System.out.println("-".repeat(140));
+        System.out.printf("%-18s %12s %12s %12s %10s %12s %12s %12s\n",
+            "Library", "Ser (ms)", "Des (ms)", "Total (ms)", "Size", "Avg Ser", "Avg Des", "Avg R/T");
+        System.out.printf("%-18s %12s %12s %12s %10s %12s %12s %12s\n",
+            "", "", "", "", "(bytes)", "(ns/op)", "(ns/op)", "(ns/op)");
+        System.out.println("-".repeat(140));
 
         double bestSer = Double.MAX_VALUE;
         double bestDeser = Double.MAX_VALUE;
+        double bestRoundTrip = Double.MAX_VALUE;
         int bestSize = Integer.MAX_VALUE;
 
         for (BenchmarkResult r : results) {
-            bestSer = Math.min(bestSer, r.serMs);
-            bestDeser = Math.min(bestDeser, r.desMs);
+            bestSer = Math.min(bestSer, r.avgSerNs);
+            bestDeser = Math.min(bestDeser, r.avgDesNs);
+            bestRoundTrip = Math.min(bestRoundTrip, r.avgRoundTripNs);
             bestSize = Math.min(bestSize, r.size);
         }
 
-        for (int i = 0; i < results.length; i++) {
-            BenchmarkResult r = results[i];
-            String serMark = r.serMs == bestSer ? " ⚡" : "";
-            String desMark = r.desMs == bestDeser ? " ⚡" : "";
-            String sizeMark = r.size == bestSize ? " 💾" : "";
+        for (BenchmarkResult r : results) {
+            String serMark = r.avgSerNs == bestSer ? "⚡" : "  ";
+            String desMark = r.avgDesNs == bestDeser ? "⚡" : "  ";
+            String rtMark = r.avgRoundTripNs == bestRoundTrip ? "⚡" : "  ";
+            String sizeMark = r.size == bestSize ? "💾" : "  ";
             double total = r.serMs + r.desMs;
-            String sizeVs = i == 0 ? "-" : String.format("%.2fx", (results[0].size / (double) r.size));
 
-            System.out.printf("%-20s %12.2f%s %12.2f%s %12.2f    %9d%s %15s\n",
-                r.name, r.serMs, serMark, r.desMs, desMark, total, r.size, sizeMark, sizeVs);
+            System.out.printf("%-18s %12.2f %12.2f %12.2f %8d %s %10.1f %s %10.1f %s %10.1f %s\n",
+                r.name, r.serMs, r.desMs, total, r.size, sizeMark,
+                r.avgSerNs, serMark, r.avgDesNs, desMark, r.avgRoundTripNs, rtMark);
         }
 
-        System.out.println("-".repeat(110));
+        System.out.println("-".repeat(140));
         System.out.println("⚡ = Fastest  💾 = Smallest\n");
     }
 
@@ -913,12 +917,22 @@ public class ComprehensiveSerializationBenchmark {
         double serMs;
         double desMs;
         int size;
+        int iterations;
 
-        BenchmarkResult(String name, long serNs, long desNs, int size) {
+        // Average costs in nanoseconds
+        double avgSerNs;
+        double avgDesNs;
+        double avgRoundTripNs;
+
+        BenchmarkResult(String name, long serNs, long desNs, int size, int iterations) {
             this.name = name;
             this.serMs = serNs / 1_000_000.0;
             this.desMs = desNs / 1_000_000.0;
             this.size = size;
+            this.iterations = iterations;
+            this.avgSerNs = (double) serNs / iterations;
+            this.avgDesNs = (double) desNs / iterations;
+            this.avgRoundTripNs = avgSerNs + avgDesNs;
         }
     }
 }
