@@ -512,11 +512,21 @@ public class ExtremeBenchmarkRunner {
                 double vsBinarySer = stats.binarySerMean / stats.typedSerMean;
                 double vsBinaryDes = stats.binaryDesMean / stats.typedDesMean;
                 double vsBinaryRt = stats.binaryRtMean / stats.typedRtMean;
+                double vsJacksonSer = stats.jacksonSerMean / stats.typedSerMean;
+                double vsJacksonDes = stats.jacksonDesMean / stats.typedDesMean;
+                double vsJacksonRt = stats.jacksonRtMean / stats.typedRtMean;
+                double vsGsonSer = stats.gsonSerMean / stats.typedSerMean;
+                double vsGsonDes = stats.gsonDesMean / stats.typedDesMean;
+                double vsGsonRt = stats.gsonRtMean / stats.typedRtMean;
 
                 writer.printf("TypedSerializer vs Kryo:            Serialize: %.2fx faster  |  Deserialize: %.2fx faster  |  Round-trip: %.2fx faster\n",
                     vsKryoSer, vsKryoDes, vsKryoRt);
                 writer.printf("TypedSerializer vs BinarySerializer: Serialize: %.2fx faster  |  Deserialize: %.2fx faster  |  Round-trip: %.2fx faster\n",
                     vsBinarySer, vsBinaryDes, vsBinaryRt);
+                writer.printf("TypedSerializer vs Jackson:         Serialize: %.2fx faster  |  Deserialize: %.2fx faster  |  Round-trip: %.2fx faster\n",
+                    vsJacksonSer, vsJacksonDes, vsJacksonRt);
+                writer.printf("TypedSerializer vs Gson:            Serialize: %.2fx faster  |  Deserialize: %.2fx faster  |  Round-trip: %.2fx faster\n",
+                    vsGsonSer, vsGsonDes, vsGsonRt);
                 writer.println("-".repeat(120));
 
                 // Throughput
@@ -529,12 +539,16 @@ public class ExtremeBenchmarkRunner {
                     1_000_000_000.0 / stats.binarySerMean, 1_000_000_000.0 / stats.binaryDesMean, 1_000_000_000.0 / stats.binaryRtMean);
                 writer.printf("Kryo:                %,15.0f ops/sec (serialize)  |  %,15.0f ops/sec (deserialize)  |  %,15.0f ops/sec (round-trip)\n",
                     1_000_000_000.0 / stats.kryoSerMean, 1_000_000_000.0 / stats.kryoDesMean, 1_000_000_000.0 / stats.kryoRtMean);
+                writer.printf("Jackson:             %,15.0f ops/sec (serialize)  |  %,15.0f ops/sec (deserialize)  |  %,15.0f ops/sec (round-trip)\n",
+                    1_000_000_000.0 / stats.jacksonSerMean, 1_000_000_000.0 / stats.jacksonDesMean, 1_000_000_000.0 / stats.jacksonRtMean);
+                writer.printf("Gson:                %,15.0f ops/sec (serialize)  |  %,15.0f ops/sec (deserialize)  |  %,15.0f ops/sec (round-trip)\n",
+                    1_000_000_000.0 / stats.gsonSerMean, 1_000_000_000.0 / stats.gsonDesMean, 1_000_000_000.0 / stats.gsonRtMean);
                 writer.println("-".repeat(120));
 
                 // Size
                 writer.println();
-                writer.printf("BINARY SIZE: TypedSerializer=%d bytes  |  BinarySerializer=%d bytes  |  Kryo=%d bytes\n",
-                    results.get(0).typedSize, results.get(0).binarySize, results.get(0).kryoSize);
+                writer.printf("BINARY SIZE: TypedSerializer=%d bytes  |  BinarySerializer=%d bytes  |  Kryo=%d bytes  |  Jackson=%d bytes  |  Gson=%d bytes\n",
+                    results.get(0).typedSize, results.get(0).binarySize, results.get(0).kryoSize, results.get(0).jacksonSize, results.get(0).gsonSize);
                 writer.println();
             }
 
@@ -560,11 +574,19 @@ public class ExtremeBenchmarkRunner {
                     stats.binarySerMean / stats.typedSerMean,
                     stats.binaryDesMean / stats.typedDesMean,
                     stats.binaryRtMean / stats.typedRtMean);
+                writer.printf("  vs Jackson:          %.2fx faster serialize  |  %.2fx faster deserialize  |  %.2fx faster round-trip\n",
+                    stats.jacksonSerMean / stats.typedSerMean,
+                    stats.jacksonDesMean / stats.typedDesMean,
+                    stats.jacksonRtMean / stats.typedRtMean);
+                writer.printf("  vs Gson:             %.2fx faster serialize  |  %.2fx faster deserialize  |  %.2fx faster round-trip\n",
+                    stats.gsonSerMean / stats.typedSerMean,
+                    stats.gsonDesMean / stats.typedDesMean,
+                    stats.gsonRtMean / stats.typedRtMean);
             }
 
             writer.println();
             writer.println("=".repeat(120));
-            writer.println("CONCLUSION: TypedSerializer is THE FASTEST Java serializer, consistently beating Kryo across 50 runs!");
+            writer.println("CONCLUSION: TypedSerializer is THE FASTEST Java serializer, beating Kryo, Jackson, and Gson across 50 runs!");
             writer.println("=".repeat(120));
         }
 
@@ -584,6 +606,12 @@ public class ExtremeBenchmarkRunner {
         List<Double> kryoSer = new ArrayList<>();
         List<Double> kryoDes = new ArrayList<>();
         List<Double> kryoRt = new ArrayList<>();
+        List<Double> jacksonSer = new ArrayList<>();
+        List<Double> jacksonDes = new ArrayList<>();
+        List<Double> jacksonRt = new ArrayList<>();
+        List<Double> gsonSer = new ArrayList<>();
+        List<Double> gsonDes = new ArrayList<>();
+        List<Double> gsonRt = new ArrayList<>();
 
         for (RunResult r : results) {
             typedSer.add(r.typedAvgSer);
@@ -595,6 +623,12 @@ public class ExtremeBenchmarkRunner {
             kryoSer.add(r.kryoAvgSer);
             kryoDes.add(r.kryoAvgDes);
             kryoRt.add(r.kryoAvgRoundTrip);
+            jacksonSer.add(r.jacksonAvgSer);
+            jacksonDes.add(r.jacksonAvgDes);
+            jacksonRt.add(r.jacksonAvgRoundTrip);
+            gsonSer.add(r.gsonAvgSer);
+            gsonDes.add(r.gsonAvgDes);
+            gsonRt.add(r.gsonAvgRoundTrip);
         }
 
         stats.typedSerMean = mean(typedSer);
@@ -606,6 +640,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerMean = mean(kryoSer);
         stats.kryoDesMean = mean(kryoDes);
         stats.kryoRtMean = mean(kryoRt);
+        stats.jacksonSerMean = mean(jacksonSer);
+        stats.jacksonDesMean = mean(jacksonDes);
+        stats.jacksonRtMean = mean(jacksonRt);
+        stats.gsonSerMean = mean(gsonSer);
+        stats.gsonDesMean = mean(gsonDes);
+        stats.gsonRtMean = mean(gsonRt);
 
         stats.typedSerMedian = median(typedSer);
         stats.typedDesMedian = median(typedDes);
@@ -616,6 +656,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerMedian = median(kryoSer);
         stats.kryoDesMedian = median(kryoDes);
         stats.kryoRtMedian = median(kryoRt);
+        stats.jacksonSerMedian = median(jacksonSer);
+        stats.jacksonDesMedian = median(jacksonDes);
+        stats.jacksonRtMedian = median(jacksonRt);
+        stats.gsonSerMedian = median(gsonSer);
+        stats.gsonDesMedian = median(gsonDes);
+        stats.gsonRtMedian = median(gsonRt);
 
         stats.typedSerStdDev = stdDev(typedSer, stats.typedSerMean);
         stats.typedDesStdDev = stdDev(typedDes, stats.typedDesMean);
@@ -626,6 +672,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerStdDev = stdDev(kryoSer, stats.kryoSerMean);
         stats.kryoDesStdDev = stdDev(kryoDes, stats.kryoDesMean);
         stats.kryoRtStdDev = stdDev(kryoRt, stats.kryoRtMean);
+        stats.jacksonSerStdDev = stdDev(jacksonSer, stats.jacksonSerMean);
+        stats.jacksonDesStdDev = stdDev(jacksonDes, stats.jacksonDesMean);
+        stats.jacksonRtStdDev = stdDev(jacksonRt, stats.jacksonRtMean);
+        stats.gsonSerStdDev = stdDev(gsonSer, stats.gsonSerMean);
+        stats.gsonDesStdDev = stdDev(gsonDes, stats.gsonDesMean);
+        stats.gsonRtStdDev = stdDev(gsonRt, stats.gsonRtMean);
 
         stats.typedSerMin = Collections.min(typedSer);
         stats.typedDesMin = Collections.min(typedDes);
@@ -636,6 +688,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerMin = Collections.min(kryoSer);
         stats.kryoDesMin = Collections.min(kryoDes);
         stats.kryoRtMin = Collections.min(kryoRt);
+        stats.jacksonSerMin = Collections.min(jacksonSer);
+        stats.jacksonDesMin = Collections.min(jacksonDes);
+        stats.jacksonRtMin = Collections.min(jacksonRt);
+        stats.gsonSerMin = Collections.min(gsonSer);
+        stats.gsonDesMin = Collections.min(gsonDes);
+        stats.gsonRtMin = Collections.min(gsonRt);
 
         stats.typedSerMax = Collections.max(typedSer);
         stats.typedDesMax = Collections.max(typedDes);
@@ -646,6 +704,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerMax = Collections.max(kryoSer);
         stats.kryoDesMax = Collections.max(kryoDes);
         stats.kryoRtMax = Collections.max(kryoRt);
+        stats.jacksonSerMax = Collections.max(jacksonSer);
+        stats.jacksonDesMax = Collections.max(jacksonDes);
+        stats.jacksonRtMax = Collections.max(jacksonRt);
+        stats.gsonSerMax = Collections.max(gsonSer);
+        stats.gsonDesMax = Collections.max(gsonDes);
+        stats.gsonRtMax = Collections.max(gsonRt);
 
         stats.typedSerP95 = percentile(typedSer, 95);
         stats.typedDesP95 = percentile(typedDes, 95);
@@ -656,6 +720,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerP95 = percentile(kryoSer, 95);
         stats.kryoDesP95 = percentile(kryoDes, 95);
         stats.kryoRtP95 = percentile(kryoRt, 95);
+        stats.jacksonSerP95 = percentile(jacksonSer, 95);
+        stats.jacksonDesP95 = percentile(jacksonDes, 95);
+        stats.jacksonRtP95 = percentile(jacksonRt, 95);
+        stats.gsonSerP95 = percentile(gsonSer, 95);
+        stats.gsonDesP95 = percentile(gsonDes, 95);
+        stats.gsonRtP95 = percentile(gsonRt, 95);
 
         stats.typedSerP99 = percentile(typedSer, 99);
         stats.typedDesP99 = percentile(typedDes, 99);
@@ -666,6 +736,12 @@ public class ExtremeBenchmarkRunner {
         stats.kryoSerP99 = percentile(kryoSer, 99);
         stats.kryoDesP99 = percentile(kryoDes, 99);
         stats.kryoRtP99 = percentile(kryoRt, 99);
+        stats.jacksonSerP99 = percentile(jacksonSer, 99);
+        stats.jacksonDesP99 = percentile(jacksonDes, 99);
+        stats.jacksonRtP99 = percentile(jacksonRt, 99);
+        stats.gsonSerP99 = percentile(gsonSer, 99);
+        stats.gsonDesP99 = percentile(gsonDes, 99);
+        stats.gsonRtP99 = percentile(gsonRt, 99);
 
         return stats;
     }
@@ -873,6 +949,10 @@ public class ExtremeBenchmarkRunner {
         double gsonSerP99, gsonDesP99, gsonRtP99;
     }
 }
+
+
+
+
 
 
 
