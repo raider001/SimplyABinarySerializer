@@ -30,6 +30,11 @@ public class ComprehensiveSerializationBenchmark {
 
     private BinarySerializer binarySerializer;
     private BinaryDeserializer binaryDeserializer;
+    private TypedSerializer<SimpleObject> typedSimpleSerializer;
+    private TypedSerializer<ComplexObject> typedComplexSerializer;
+    private TypedSerializer<ListObject> typedListSerializer;
+    private TypedSerializer<MapObject> typedMapSerializer;
+    private TypedSerializer<DeepObject> typedDeepSerializer;
     private ObjectMapper jacksonMapper;
     private ThreadLocal<Kryo> kryoThreadLocal;
     private ObjectMapper msgpackMapper;
@@ -38,6 +43,14 @@ public class ComprehensiveSerializationBenchmark {
     public void setup() {
         binarySerializer = new BinarySerializer();
         binaryDeserializer = new BinaryDeserializer();
+
+        // Initialize TypedSerializers - schema computed once per class
+        typedSimpleSerializer = new TypedSerializer<>(SimpleObject.class);
+        typedComplexSerializer = new TypedSerializer<>(ComplexObject.class);
+        typedListSerializer = new TypedSerializer<>(ListObject.class);
+        typedMapSerializer = new TypedSerializer<>(MapObject.class);
+        typedDeepSerializer = new TypedSerializer<>(DeepObject.class);
+
         jacksonMapper = new ObjectMapper();
 
         // Force new Kryo instance with all registrations
@@ -74,11 +87,12 @@ public class ComprehensiveSerializationBenchmark {
 
         // Benchmark
         BenchmarkResult binary = benchmarkBinary();
+        BenchmarkResult typed = benchmarkTypedSimple();
         BenchmarkResult jackson = benchmarkJackson();
         BenchmarkResult kryo = benchmarkKryo();
         BenchmarkResult msgpack = benchmarkMessagePack();
 
-        printTable("SimpleObject", binary, jackson, kryo, msgpack);
+        printTable("SimpleObject", binary, typed, jackson, kryo, msgpack);
     }
 
     @Test
@@ -95,11 +109,12 @@ public class ComprehensiveSerializationBenchmark {
 
         // Benchmark
         BenchmarkResult binary = benchmarkBinaryComplex();
+        BenchmarkResult typed = benchmarkTypedComplex();
         BenchmarkResult jackson = benchmarkJacksonComplex();
         BenchmarkResult kryo = benchmarkKryoComplex();
         BenchmarkResult msgpack = benchmarkMessagePackComplex();
 
-        printTable("ComplexObject", binary, jackson, kryo, msgpack);
+        printTable("ComplexObject", binary, typed, jackson, kryo, msgpack);
     }
 
     @Test
@@ -116,11 +131,12 @@ public class ComprehensiveSerializationBenchmark {
 
         // Benchmark
         BenchmarkResult binary = benchmarkBinaryList();
+        BenchmarkResult typed = benchmarkTypedList();
         BenchmarkResult jackson = benchmarkJacksonList();
         BenchmarkResult kryo = benchmarkKryoList();
         BenchmarkResult msgpack = benchmarkMessagePackList();
 
-        printTable("ListObject (3 lists: Integer, String, Boolean)", binary, jackson, kryo, msgpack);
+        printTable("ListObject (3 lists: Integer, String, Boolean)", binary, typed, jackson, kryo, msgpack);
     }
 
     @Test
@@ -137,11 +153,12 @@ public class ComprehensiveSerializationBenchmark {
 
         // Benchmark
         BenchmarkResult binary = benchmarkBinaryMap();
+        BenchmarkResult typed = benchmarkTypedMap();
         BenchmarkResult jackson = benchmarkJacksonMap();
         BenchmarkResult kryo = benchmarkKryoMap();
         BenchmarkResult msgpack = benchmarkMessagePackMap();
 
-        printTable("MapObject (3 maps: String->Integer, String->String, Integer->String)", binary, jackson, kryo, msgpack);
+        printTable("MapObject (3 maps: String->Integer, String->String, Integer->String)", binary, typed, jackson, kryo, msgpack);
     }
 
     @Test
@@ -158,11 +175,12 @@ public class ComprehensiveSerializationBenchmark {
 
         // Benchmark
         BenchmarkResult binary = benchmarkBinaryDeep();
+        BenchmarkResult typed = benchmarkTypedDeep();
         BenchmarkResult jackson = benchmarkJacksonDeep();
         BenchmarkResult kryo = benchmarkKryoDeep();
         BenchmarkResult msgpack = benchmarkMessagePackDeep();
 
-        printTable("DeepObject (5 levels of nesting)", binary, jackson, kryo, msgpack);
+        printTable("DeepObject (5 levels of nesting)", binary, typed, jackson, kryo, msgpack);
     }
 
     private BenchmarkResult benchmarkBinary() throws Exception {
@@ -181,6 +199,24 @@ public class ComprehensiveSerializationBenchmark {
         long deserTime = System.nanoTime() - deserStart;
 
         return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+    }
+
+    private BenchmarkResult benchmarkTypedSimple() throws Exception {
+        byte[][] data = new byte[BENCHMARK_ITERATIONS][];
+
+        long serStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            data[i] = typedSimpleSerializer.serialize(createSimpleObject(i));
+        }
+        long serTime = System.nanoTime() - serStart;
+
+        long deserStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            typedSimpleSerializer.deserialize(data[i]);
+        }
+        long deserTime = System.nanoTime() - deserStart;
+
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
     }
 
     private BenchmarkResult benchmarkJackson() throws Exception {
@@ -261,6 +297,25 @@ public class ComprehensiveSerializationBenchmark {
         long deserTime = System.nanoTime() - deserStart;
 
         return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+    }
+
+    private BenchmarkResult benchmarkTypedComplex() throws Exception {
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        byte[][] data = new byte[iterations][];
+
+        long serStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            data[i] = typedComplexSerializer.serialize(createComplexObject(i));
+        }
+        long serTime = System.nanoTime() - serStart;
+
+        long deserStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            typedComplexSerializer.deserialize(data[i]);
+        }
+        long deserTime = System.nanoTime() - deserStart;
+
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
     }
 
     private BenchmarkResult benchmarkJacksonComplex() throws Exception {
@@ -344,6 +399,25 @@ public class ComprehensiveSerializationBenchmark {
         long deserTime = System.nanoTime() - deserStart;
 
         return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+    }
+
+    private BenchmarkResult benchmarkTypedList() throws Exception {
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        byte[][] data = new byte[iterations][];
+
+        long serStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            data[i] = typedListSerializer.serialize(createListObject(i));
+        }
+        long serTime = System.nanoTime() - serStart;
+
+        long deserStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            typedListSerializer.deserialize(data[i]);
+        }
+        long deserTime = System.nanoTime() - deserStart;
+
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
     }
 
     private BenchmarkResult benchmarkJacksonList() throws Exception {
@@ -443,6 +517,25 @@ public class ComprehensiveSerializationBenchmark {
         return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
     }
 
+    private BenchmarkResult benchmarkTypedMap() throws Exception {
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        byte[][] data = new byte[iterations][];
+
+        long serStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            data[i] = typedMapSerializer.serialize(createMapObject(i));
+        }
+        long serTime = System.nanoTime() - serStart;
+
+        long deserStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            typedMapSerializer.deserialize(data[i]);
+        }
+        long deserTime = System.nanoTime() - deserStart;
+
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
+    }
+
     private BenchmarkResult benchmarkJacksonMap() throws Exception {
         int iterations = BENCHMARK_ITERATIONS / 5;
         byte[][] data = new byte[iterations][];
@@ -524,6 +617,25 @@ public class ComprehensiveSerializationBenchmark {
         long deserTime = System.nanoTime() - deserStart;
 
         return new BenchmarkResult("BinarySerializer", serTime, deserTime, data[0].length);
+    }
+
+    private BenchmarkResult benchmarkTypedDeep() throws Exception {
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        byte[][] data = new byte[iterations][];
+
+        long serStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            data[i] = typedDeepSerializer.serialize(createDeepObject(i, 5));
+        }
+        long serTime = System.nanoTime() - serStart;
+
+        long deserStart = System.nanoTime();
+        for (int i = 0; i < iterations; i++) {
+            typedDeepSerializer.deserialize(data[i]);
+        }
+        long deserTime = System.nanoTime() - deserStart;
+
+        return new BenchmarkResult("TypedSerializer", serTime, deserTime, data[0].length);
     }
 
     private BenchmarkResult benchmarkJacksonDeep() throws Exception {
