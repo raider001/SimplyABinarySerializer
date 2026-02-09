@@ -1,0 +1,37 @@
+package com.kalynx.simplyabinaryserializer;
+
+public class TypeMarkers {
+    // Type markers
+    static final byte TYPE_STRING = 1;
+    static final byte TYPE_INT = 2;
+    static final byte TYPE_LONG = 3;
+    static final byte TYPE_BOOLEAN = 4;
+    static final byte TYPE_DOUBLE = 5;
+    static final byte TYPE_MAP = 6;
+    static final byte TYPE_OBJECT = 7;
+    static final byte TYPE_LIST = 8;
+    static final byte TYPE_SET = 9;
+    static final byte TYPE_ARRAY = 10;
+    static final byte TYPE_NULL = 11;
+    static final byte TYPE_FLOAT = 15;
+    static final byte TYPE_SHORT = 16;
+
+    // Optimized type markers
+    static final byte TYPE_OBJECT_PACKED = 12; // Object with packed field descriptors
+    static final byte TYPE_LIST_STRING = 13;   // Homogeneous list of strings
+    static final byte TYPE_SCHEMALESS = 14;    // Schema-based (no type markers, class as template)
+
+    static final byte NIBBLE_NULL = 0x0;
+    static final byte NIBBLE_STRING = 0x1;
+    static final byte NIBBLE_INT = 0x2;
+    static final byte NIBBLE_LONG = 0x3;
+    static final byte NIBBLE_BOOLEAN = 0x4;
+    static final byte NIBBLE_DOUBLE = 0x5;
+    static final byte NIBBLE_FLOAT = 0xA;
+    static final byte NIBBLE_SHORT = 0xB;
+    static final byte NIBBLE_LIST_STRING = 0x6; // Homogeneous string list
+    static final byte NIBBLE_LIST_GENERIC = 0x7;
+    static final byte NIBBLE_NESTED_OBJECT = 0x8;
+    static final byte NIBBLE_MAP = 0x9; // Map type
+
+}
