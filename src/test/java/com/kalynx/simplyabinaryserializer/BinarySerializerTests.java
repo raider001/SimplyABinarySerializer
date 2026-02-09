@@ -491,7 +491,6 @@ public class BinarySerializerTests {
 
     }
 
-
     @Test
     public void serialize_TestListWithComplexObjects_serializesCorrectly() throws Exception {
         /*
@@ -719,6 +718,346 @@ public class BinarySerializerTests {
         }
     }
 
+    @Test
+    public void serialize_TestObjectWithInternalObject_serializesCorrectly() throws Exception {
+        /*
+         * Binary Format Structure for Object with Nested Object:
+         *
+         * [Outer Object Header: 2 bytes]
+         *   Byte 0:     TYPE_OBJECT_PACKED marker (12)
+         *   Byte 1:     Field count (1 field - the nested object)
+         *
+         * [Outer Type Descriptors: 1 byte]
+         *   Byte 2:     0x80 = nested_object(0x8) << 4 | padding(0x0)
+         *
+         * [Nested Object Data: varint length-prefixed]
+         *   Byte 3:     Length of nested object as varint (0x26 = 38 bytes)
+         *   Byte 4:     TYPE_OBJECT_PACKED marker (12) for nested object
+         *   Byte 5:     Field count (7) for nested object
+         *   Bytes 6-9:  Type descriptors (4 bytes, same as TestSimpleObject)
+         *   Bytes 10+:  Field data for nested TestSimpleObject
+         *
+         * The nested TestSimpleObject has the same structure as in serialize_TestSimpleObject_serializesCorrectly:
+         *   - int id = 1 (4 bytes)
+         *   - String name = "Test" (1 + 4 bytes)
+         *   - boolean active = true (1 byte)
+         *   - double doubleValue = 3.14 (8 bytes)
+         *   - float floatValue = 2.71f (4 bytes)
+         *   - long longValue = 123456789L (8 bytes)
+         *   - short shortValue = 42 (2 bytes)
+         *
+         * Total nested object size: 2 (header) + 4 (type descriptors) + 32 (field data) = 38 bytes
+         * Total size: 3 (outer header + type) + 1 (varint length) + 38 (nested object) = 42 bytes
+         */
+
+        // Arrange
+        BinarySerializer serializer = new BinarySerializer();
+
+        // Act
+        byte[] data = serializer.serialize(new TestObjectWithInternalObject(), TestObjectWithInternalObject.class);
+
+        // Assert
+        assert data != null;
+        assert data.length > 0;
+
+        int pos = 0;
+
+        // Segment 1: Outer object header - TYPE_OBJECT_PACKED marker
+        byte outerTypeMarker = data[pos++];
+        assert outerTypeMarker == 12 : "Expected outer TYPE_OBJECT_PACKED (12), got " + outerTypeMarker;
+
+        // Segment 2: Outer object field count (1 field: the nested object)
+        byte outerFieldCount = data[pos++];
+        assert outerFieldCount == 1 : "Expected 1 field in outer object, got " + outerFieldCount;
+
+        // Segment 3: Outer type descriptor - object type (0x8 = NIBBLE_NESTED_OBJECT)
+        byte outerTypeDesc = data[pos++];
+        assert (outerTypeDesc & 0xFF) == 0x80 : "Expected type descriptor 0x80 (nested_object,padding), got 0x" +
+                Integer.toHexString(outerTypeDesc & 0xFF);
+
+        // Segment 4: Length prefix for nested object (varint encoding)
+        int nestedObjectLength = readVarint(data, pos);
+        int varintBytes = varintByteCount(nestedObjectLength);
+        pos += varintBytes;
+        assert nestedObjectLength == 38 : "Expected nested object length=38, got " + nestedObjectLength;
+
+        // Segment 5: Nested object header - TYPE_OBJECT_PACKED marker
+        byte nestedTypeMarker = data[pos++];
+        assert nestedTypeMarker == 12 : "Expected nested TYPE_OBJECT_PACKED (12), got " + nestedTypeMarker;
+
+        // Segment 6: Nested object field count (7 fields)
+        byte nestedFieldCount = data[pos++];
+        assert nestedFieldCount == 7 : "Expected 7 fields in nested object, got " + nestedFieldCount;
+
+        // Segment 7: Nested type descriptors (4 bytes) - same as TestSimpleObject
+        byte nibblePair1 = data[pos++];
+        assert nibblePair1 == 0x21 : "Expected nibbles 0x21 (int,string), got 0x" +
+                Integer.toHexString(nibblePair1 & 0xFF);
+
+        byte nibblePair2 = data[pos++];
+        assert nibblePair2 == 0x45 : "Expected nibbles 0x45 (boolean,double), got 0x" +
+                Integer.toHexString(nibblePair2 & 0xFF);
+
+        byte nibblePair3 = data[pos++];
+        assert (nibblePair3 & 0xFF) == 0xA3 : "Expected nibbles 0xA3 (float,long), got 0x" +
+                Integer.toHexString(nibblePair3 & 0xFF);
+
+        byte nibblePair4 = data[pos++];
+        assert (nibblePair4 & 0xFF) == 0xB0 : "Expected nibbles 0xB0 (short,padding), got 0x" +
+                Integer.toHexString(nibblePair4 & 0xFF);
+
+        // Segment 8: Nested field data - int id = 1
+        int id = ((data[pos++] & 0xFF) << 24) |
+                 ((data[pos++] & 0xFF) << 16) |
+                 ((data[pos++] & 0xFF) << 8) |
+                 (data[pos++] & 0xFF);
+        assert id == 1 : "Expected id=1, got " + id;
+
+        // Segment 9: Nested field data - String name = "Test"
+        int nameLength = data[pos++] & 0xFF;
+        assert nameLength == 4 : "Expected name length=4, got " + nameLength;
+        String name = new String(data, pos, nameLength, java.nio.charset.StandardCharsets.UTF_8);
+        pos += nameLength;
+        assert name.equals("Test") : "Expected name='Test', got '" + name + "'";
+
+        // Segment 10: Nested field data - boolean active = true
+        byte active = data[pos++];
+        assert active == 1 : "Expected active=1 (true), got " + active;
+
+        // Segment 11: Nested field data - double doubleValue = 3.14
+        long doubleBits = ((long)(data[pos++] & 0xFF) << 56) |
+                          ((long)(data[pos++] & 0xFF) << 48) |
+                          ((long)(data[pos++] & 0xFF) << 40) |
+                          ((long)(data[pos++] & 0xFF) << 32) |
+                          ((long)(data[pos++] & 0xFF) << 24) |
+                          ((long)(data[pos++] & 0xFF) << 16) |
+                          ((long)(data[pos++] & 0xFF) << 8) |
+                          (long)(data[pos++] & 0xFF);
+        double doubleValue = Double.longBitsToDouble(doubleBits);
+        assert Math.abs(doubleValue - 3.14) < 0.001 : "Expected doubleValue~3.14, got " + doubleValue;
+
+        // Segment 12: Nested field data - float floatValue = 2.71f
+        int floatBits = ((data[pos++] & 0xFF) << 24) |
+                        ((data[pos++] & 0xFF) << 16) |
+                        ((data[pos++] & 0xFF) << 8) |
+                        (data[pos++] & 0xFF);
+        float floatValue = Float.intBitsToFloat(floatBits);
+        assert Math.abs(floatValue - 2.71f) < 0.001f : "Expected floatValue~2.71, got " + floatValue;
+
+        // Segment 13: Nested field data - long longValue = 123456789L
+        long longValue = ((long)(data[pos++] & 0xFF) << 56) |
+                         ((long)(data[pos++] & 0xFF) << 48) |
+                         ((long)(data[pos++] & 0xFF) << 40) |
+                         ((long)(data[pos++] & 0xFF) << 32) |
+                         ((long)(data[pos++] & 0xFF) << 24) |
+                         ((long)(data[pos++] & 0xFF) << 16) |
+                         ((long)(data[pos++] & 0xFF) << 8) |
+                         (long)(data[pos++] & 0xFF);
+        assert longValue == 123456789L : "Expected longValue=123456789, got " + longValue;
+
+        // Segment 14: Nested field data - short shortValue = 42
+        short shortValue = (short)(((data[pos++] & 0xFF) << 8) | (data[pos++] & 0xFF));
+        assert shortValue == 42 : "Expected shortValue=42, got " + shortValue;
+
+        // Verify we consumed all bytes
+        assert pos == data.length : "Expected to consume all " + data.length + " bytes, consumed " + pos;
+
+        System.out.println("✓ Nested object binary format validation passed:");
+        System.out.println("  Total size: " + data.length + " bytes");
+        System.out.println("  Outer object: 3 bytes (header + type descriptor)");
+        System.out.println("  Length prefix: " + varintBytes + " byte(s) varint = " + nestedObjectLength);
+        System.out.println("  Nested object: 38 bytes");
+        System.out.println("    - Header: 2 bytes");
+        System.out.println("    - Type descriptors: 4 bytes");
+        System.out.println("    - Field data: 32 bytes");
+        System.out.println("  All nested fields validated: id=1, name='Test', active=true,");
+        System.out.println("    doubleValue=3.14, floatValue=2.71, longValue=123456789, shortValue=42");
+    }
+
+    public class TestObjectWithInternalObject {
+        TestSimpleObject obj = new TestSimpleObject(1, "Test", true, 3.14, 2.71f, 123456789L, (short) 42);
+    }
+
+    @Test
+    public void serialize_MixedTestObject_serializesCorrectly() throws Exception {
+        /*
+         * Binary Format Structure for Mixed Object:
+         *
+         * [Header: 2 bytes]
+         *   Byte 0:     TYPE_OBJECT_PACKED marker (12)
+         *   Byte 1:     Field count (6 fields: id, name, active, nestedObj, tags, metadata)
+         *
+         * [Type Descriptors: 3 bytes]
+         *   Byte 2:     0x21 = int(0x2) << 4 | string(0x1)
+         *   Byte 3:     0x48 = boolean(0x4) << 4 | nested_object(0x8)
+         *   Byte 4:     0x69 = list_string(0x6) << 4 | map(0x9)
+         *
+         * [Field Data: Complex structure]
+         *   - int id
+         *   - String name
+         *   - boolean active
+         *   - TestSimpleObject nestedObj (varint length + nested object data)
+         *   - List<String> tags (TYPE_LIST_STRING - optimized varint-based format)
+         *   - Map<String, Integer> metadata (map data)
+         *
+         * This validates the serializer can handle complex mixed object graphs.
+         */
+
+        // Arrange
+        BinarySerializer serializer = new BinarySerializer();
+        MixedTestObject obj = new MixedTestObject();
+
+        // Act
+        byte[] data = serializer.serialize(obj, MixedTestObject.class);
+
+        // Assert
+        assert data != null;
+        assert data.length > 0;
+
+        int pos = 0;
+
+        // Segment 1: Header - TYPE_OBJECT_PACKED marker
+        byte typeMarker = data[pos++];
+        assert typeMarker == 12 : "Expected TYPE_OBJECT_PACKED (12), got " + typeMarker;
+
+        // Segment 2: Field count (6 fields: id, name, active, nestedObj, tags, metadata)
+        byte fieldCount = data[pos++];
+        assert fieldCount == 6 : "Expected 6 fields, got " + fieldCount;
+
+        // Segment 3: Packed type descriptors
+        // Fields: int(2), String(1), boolean(4), nested_object(8), list_string(6), map(9)
+        // Nibbles: 0x2, 0x1, 0x4, 0x8, 0x6, 0x9
+        // Packed: (0x2 << 4 | 0x1) = 0x21, (0x4 << 4 | 0x8) = 0x48, (0x6 << 4 | 0x9) = 0x69
+        byte nibblePair1 = data[pos++];
+        assert nibblePair1 == 0x21 : "Expected nibbles 0x21 (int,string), got 0x" +
+                Integer.toHexString(nibblePair1 & 0xFF);
+
+        byte nibblePair2 = data[pos++];
+        assert nibblePair2 == 0x48 : "Expected nibbles 0x48 (boolean,nested_object), got 0x" +
+                Integer.toHexString(nibblePair2 & 0xFF);
+
+        byte nibblePair3 = data[pos++];
+        assert (nibblePair3 & 0xFF) == 0x69 : "Expected nibbles 0x69 (list_string,map), got 0x" +
+                Integer.toHexString(nibblePair3 & 0xFF);
+
+        // Segment 4: Field data - int id = 42
+        int id = ((data[pos++] & 0xFF) << 24) |
+                 ((data[pos++] & 0xFF) << 16) |
+                 ((data[pos++] & 0xFF) << 8) |
+                 (data[pos++] & 0xFF);
+        assert id == 42 : "Expected id=42, got " + id;
+
+        // Segment 5: Field data - String name = "MixedObject"
+        int nameLength = readVarint(data, pos);
+        pos += varintByteCount(nameLength);
+        assert nameLength == 11 : "Expected name length=11, got " + nameLength;
+        String name = new String(data, pos, nameLength, java.nio.charset.StandardCharsets.UTF_8);
+        pos += nameLength;
+        assert name.equals("MixedObject") : "Expected name='MixedObject', got '" + name + "'";
+
+        // Segment 6: Field data - boolean active = true
+        byte active = data[pos++];
+        assert active == 1 : "Expected active=1 (true), got " + active;
+
+        // Segment 7: Field data - TestSimpleObject nestedObj (varint length prefix)
+        int nestedObjLength = readVarint(data, pos);
+        pos += varintByteCount(nestedObjLength);
+        // The nested object has id=100, name="Nested" (6 chars), so size is 40 bytes
+        assert nestedObjLength == 40 : "Expected nested object length=40, got " + nestedObjLength;
+
+        // Validate nested object header
+        byte nestedTypeMarker = data[pos++];
+        assert nestedTypeMarker == 12 : "Expected nested TYPE_OBJECT_PACKED (12), got " + nestedTypeMarker;
+
+        byte nestedFieldCount = data[pos++];
+        assert nestedFieldCount == 7 : "Expected 7 fields in nested object, got " + nestedFieldCount;
+
+        // Skip nested object type descriptors (4 bytes) and field data (34 bytes) = 38 bytes remaining
+        pos += 38;
+
+        // Segment 8: Field data - List<String> tags = ["tag1", "tag2", "tag3"]
+        // This is TYPE_LIST_STRING (optimized) with varint size and varint string lengths
+        int listSize = readVarint(data, pos);
+        pos += varintByteCount(listSize);
+        assert listSize == 3 : "Expected list size=3, got " + listSize;
+
+        // Read each string in the list
+        for (int i = 0; i < listSize; i++) {
+            int strLen = readVarint(data, pos);
+            pos += varintByteCount(strLen);
+            String tag = new String(data, pos, strLen, java.nio.charset.StandardCharsets.UTF_8);
+            pos += strLen;
+            assert tag.equals("tag" + (i + 1)) : "Expected tag" + (i + 1) + ", got " + tag;
+        }
+
+        // Segment 9: Field data - Map<String, Integer> metadata
+        // Map format: 4-byte size, then key-value pairs (each with type marker)
+        int mapSize = ((data[pos++] & 0xFF) << 24) |
+                     ((data[pos++] & 0xFF) << 16) |
+                     ((data[pos++] & 0xFF) << 8) |
+                     (data[pos++] & 0xFF);
+        assert mapSize == 2 : "Expected map size=2, got " + mapSize;
+
+        // Validate each map entry (key type, key, value type, value)
+        for (int i = 0; i < mapSize; i++) {
+            // Key type marker
+            byte keyType = data[pos++];
+            assert keyType == 1 : "Expected key type=1 (string), got " + keyType;
+
+            // Key string length (2 bytes)
+            int keyLen = ((data[pos++] & 0xFF) << 8) | (data[pos++] & 0xFF);
+            String key = new String(data, pos, keyLen, java.nio.charset.StandardCharsets.UTF_8);
+            pos += keyLen;
+
+            // Value type marker
+            byte valType = data[pos++];
+            assert valType == 2 : "Expected value type=2 (int), got " + valType;
+
+            // Value int (4 bytes)
+            int val = ((data[pos++] & 0xFF) << 24) |
+                     ((data[pos++] & 0xFF) << 16) |
+                     ((data[pos++] & 0xFF) << 8) |
+                     (data[pos++] & 0xFF);
+
+            // Verify the key-value pairs match expected data
+            boolean validEntry = (key.equals("count") && val == 5) || (key.equals("version") && val == 2);
+            assert validEntry : "Unexpected map entry: " + key + "=" + val;
+        }
+
+        // Verify we consumed all bytes
+        assert pos == data.length : "Expected to consume all " + data.length + " bytes, consumed " + pos;
+
+        System.out.println("✓ Mixed object binary format validation passed:");
+        System.out.println("  Total size: " + data.length + " bytes");
+        System.out.println("  Object contains:");
+        System.out.println("    - Primitive int: id=42");
+        System.out.println("    - Primitive String: name='MixedObject'");
+        System.out.println("    - Primitive boolean: active=true");
+        System.out.println("    - Nested object: TestSimpleObject (40 bytes)");
+        System.out.println("    - List<String>: 3 tags (TYPE_LIST_STRING optimized)");
+        System.out.println("    - Map<String,Integer>: 2 metadata entries");
+        System.out.println("  All fields validated successfully!");
+    }
+
+    static class MixedTestObject {
+        private int id;
+        private String name;
+        private boolean active;
+        private TestSimpleObject nestedObj;
+        private List<String> tags;
+        private Map<String, Integer> metadata;
+
+        public MixedTestObject() {
+            this.id = 42;
+            this.name = "MixedObject";
+            this.active = true;
+            this.nestedObj = new TestSimpleObject(100, "Nested", false, 1.23, 4.56f, 999999L, (short) 10);
+            this.tags = Arrays.asList("tag1", "tag2", "tag3");
+            this.metadata = new HashMap<>();
+            this.metadata.put("count", 5);
+            this.metadata.put("version", 2);
+        }
+    }
     /**
      * Helper method to validate map structure and advance position.
      * Returns the new position after consuming the map data.
@@ -786,5 +1125,37 @@ public class BinarySerializerTests {
                 throw new AssertionError("Unexpected type marker: " + typeMarker);
         }
         return pos;
+    }
+
+    /**
+     * Read a varint from a byte array.
+     * Returns the decoded integer value.
+     */
+    private int readVarint(byte[] bytes, int pos) {
+        int result = 0;
+        int shift = 0;
+
+        while (pos < bytes.length) {
+            byte b = bytes[pos];
+            result |= (b & 0x7F) << shift;
+            if ((b & 0x80) == 0) {
+                return result;
+            }
+            shift += 7;
+            pos++;
+        }
+
+        throw new AssertionError("Incomplete varint at position " + pos);
+    }
+
+    /**
+     * Calculate how many bytes a varint value occupies.
+     */
+    private int varintByteCount(int value) {
+        if (value < (1 << 7)) return 1;
+        if (value < (1 << 14)) return 2;
+        if (value < (1 << 21)) return 3;
+        if (value < (1 << 28)) return 4;
+        return 5;
     }
 }

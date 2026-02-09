@@ -43,6 +43,10 @@ class FastByteReader {
         return Double.longBitsToDouble(readLong());
     }
 
+    float readFloat() {
+        return Float.intBitsToFloat(readInt());
+    }
+
     short readShort() {
         return (short)(((buf[pos++] & 0xFF) << 8) | (buf[pos++] & 0xFF));
     }
