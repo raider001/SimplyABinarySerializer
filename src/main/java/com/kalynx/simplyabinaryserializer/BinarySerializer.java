@@ -39,6 +39,16 @@ public class BinarySerializer implements Serializer {
     private static final ThreadLocal<FastByteWriter> FAST_WRITER =
             ThreadLocal.withInitial(FastByteWriter::new);
 
+    // Pool of FastByteWriter instances for nested serialization to avoid ThreadLocal conflicts
+    private static final ThreadLocal<java.util.ArrayDeque<FastByteWriter>> WRITER_POOL =
+            ThreadLocal.withInitial(() -> {
+                java.util.ArrayDeque<FastByteWriter> pool = new java.util.ArrayDeque<>(4);
+                for (int i = 0; i < 4; i++) {
+                    pool.push(new FastByteWriter());
+                }
+                return pool;
+            });
+
     private static final Map<Class<?>, ClassSchema> SCHEMA_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
 
@@ -51,14 +61,18 @@ public class BinarySerializer implements Serializer {
         }
 
         // For complex objects, use fast two-pass serialization
-        // This completely bypasses DataOutputStream for the hot path
         byte typeMarker = getTypeMarker(obj);
 
         if (typeMarker == TYPE_OBJECT_PACKED) {
             return serializeObjectFast(obj);
         }
 
-        // For other complex types (List, Set, Map, Array), use streaming approach
+        // Optimize Map serialization - use FastByteWriter instead of DataOutputStream
+        if (obj instanceof Map) {
+            return serializeMapFast((Map<?, ?>) obj);
+        }
+
+        // For other complex types (List, Set, Array), use streaming approach
         ByteArrayOutputStream baos = REUSABLE_BAOS.get();
         baos.reset();
         DataOutputStream dos = new DataOutputStream(baos);
@@ -71,23 +85,309 @@ public class BinarySerializer implements Serializer {
             writeSet(dos, (Set<?>) obj);
         } else if (obj.getClass().isArray()) {
             writeArray(dos, obj);
-        } else if (obj instanceof Map) {
-            writeMap(dos, (Map<?, ?>) obj);
         }
 
         dos.flush();
         return baos.toByteArray();
     }
 
+    /**
+     * Optimized map serialization using FastByteWriter for better performance.
+     * This version includes TYPE_MAP marker for standalone maps.
+     */
+    private byte[] serializeMapFast(Map<?, ?> map) throws Exception {
+        // Pre-calculate size for single allocation
+        int estimatedSize = 1 + 4 + (map.size() * 20); // type + size + estimated per-entry
+        FastByteWriter writer = FAST_WRITER.get();
+        writer.reset(estimatedSize);
+
+        writer.writeByte(TYPE_MAP);
+        writer.writeInt(map.size());
+
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            writeValueFast(writer, entry.getKey());
+            writeValueFast(writer, entry.getValue());
+        }
+
+        return writer.toByteArray();
+    }
+
+    /**
+     * Serialize map content without TYPE_MAP marker for use in nested contexts.
+     * Optimized: detects uniform types in single pass without caching overhead.
+     */
+    private byte[] serializeMapContentFast(Map<?, ?> map) throws Exception {
+        int size = map.size();
+
+        // Fast path for empty maps
+        if (size == 0) {
+            return new byte[] {0, 0, 0, 0, 0}; // size + uniform flags
+        }
+
+        // Get writer from pool
+        java.util.ArrayDeque<FastByteWriter> pool = WRITER_POOL.get();
+        FastByteWriter writer = pool.poll();
+        if (writer == null) {
+            writer = new FastByteWriter();
+        }
+
+        try {
+            // Single-pass: detect uniformity while collecting data
+            Object[] keys = new Object[size];
+            Object[] values = new Object[size];
+            byte[][] keyStringBytes = new byte[size][];
+            byte[][] valueStringBytes = new byte[size][];
+
+            byte firstKeyType = -1;
+            byte firstValueType = -1;
+            boolean uniformKeys = true;
+            boolean uniformValues = true;
+
+            int totalSize = 4 + 1; // size + uniform flags
+            int idx = 0;
+
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                keys[idx] = entry.getKey();
+                values[idx] = entry.getValue();
+
+                // Check key type
+                byte keyType = getTypeMarkerFast(keys[idx]);
+                if (idx == 0) {
+                    firstKeyType = keyType;
+                    totalSize += 1;
+                } else if (uniformKeys && keyType != firstKeyType) {
+                    uniformKeys = false;
+                    totalSize += idx; // Add markers we skipped
+                }
+                if (!uniformKeys) totalSize += 1;
+                totalSize += getSizeForType(keys[idx], keyType, keyStringBytes, idx);
+
+                // Check value type
+                byte valueType = getTypeMarkerFast(values[idx]);
+                if (idx == 0) {
+                    firstValueType = valueType;
+                    totalSize += 1;
+                } else if (uniformValues && valueType != firstValueType) {
+                    uniformValues = false;
+                    totalSize += idx;
+                }
+                if (!uniformValues) totalSize += 1;
+                totalSize += getSizeForType(values[idx], valueType, valueStringBytes, idx);
+
+                idx++;
+            }
+
+            // Write optimized format
+            writer.reset(totalSize);
+            writer.writeInt(size);
+
+            byte uniformFlags = (byte)((uniformKeys ? 1 : 0) | (uniformValues ? 2 : 0));
+            writer.writeByte(uniformFlags);
+
+            if (uniformKeys) writer.writeByte(firstKeyType);
+            if (uniformValues) writer.writeByte(firstValueType);
+
+            for (int i = 0; i < size; i++) {
+                if (!uniformKeys) writer.writeByte(getTypeMarkerFast(keys[i]));
+                writeValueData(writer, keys[i], uniformKeys ? firstKeyType : getTypeMarkerFast(keys[i]), keyStringBytes[i]);
+
+                if (!uniformValues) writer.writeByte(getTypeMarkerFast(values[i]));
+                writeValueData(writer, values[i], uniformValues ? firstValueType : getTypeMarkerFast(values[i]), valueStringBytes[i]);
+            }
+
+            return writer.toByteArray();
+        } finally {
+            if (pool.size() < 4) {
+                pool.push(writer);
+            }
+        }
+    }
+
+    /**
+     * Write just the data without type marker (marker already written or assumed from shape).
+     */
+    private void writeValueData(FastByteWriter writer, Object value, byte marker, byte[] cachedBytes) throws Exception {
+        switch (marker) {
+            case TYPE_NULL: break;
+            case TYPE_STRING:
+                writer.writeShort((short) cachedBytes.length);
+                writer.writeBytes(cachedBytes);
+                break;
+            case TYPE_INT: writer.writeInt((Integer) value); break;
+            case TYPE_LONG: writer.writeLong((Long) value); break;
+            case TYPE_BOOLEAN: writer.writeBoolean((Boolean) value); break;
+            case TYPE_DOUBLE: writer.writeDouble((Double) value); break;
+            case TYPE_FLOAT: writer.writeFloat((Float) value); break;
+            case TYPE_SHORT: writer.writeShort((Short) value); break;
+            case TYPE_OBJECT:
+            case TYPE_OBJECT_PACKED:
+                if (cachedBytes != null) {
+                    writer.writeInt(cachedBytes.length);
+                    writer.writeBytes(cachedBytes);
+                } else {
+                    @SuppressWarnings("unchecked")
+                    byte[] nested = serialize(value, (Class<Object>) value.getClass());
+                    writer.writeInt(nested.length);
+                    writer.writeBytes(nested);
+                }
+                break;
+        }
+    }
+
+    private byte getTypeMarkerFast(Object obj) {
+        if (obj == null) return TYPE_NULL;
+        if (obj instanceof String) return TYPE_STRING;
+        if (obj instanceof Integer) return TYPE_INT;
+        if (obj instanceof Long) return TYPE_LONG;
+        if (obj instanceof Boolean) return TYPE_BOOLEAN;
+        if (obj instanceof Double) return TYPE_DOUBLE;
+        if (obj instanceof Float) return TYPE_FLOAT;
+        if (obj instanceof Short) return TYPE_SHORT;
+        return TYPE_OBJECT_PACKED; // Use packed format for complex objects
+    }
+
+    private int getSizeForType(Object value, byte marker, byte[][] cache, int idx) throws Exception {
+        switch (marker) {
+            case TYPE_NULL: return 0;
+            case TYPE_STRING:
+                byte[] strBytes = ((String) value).getBytes(StandardCharsets.UTF_8);
+                cache[idx] = strBytes;
+                return 2 + strBytes.length;
+            case TYPE_INT: return 4;
+            case TYPE_LONG: return 8;
+            case TYPE_BOOLEAN: return 1;
+            case TYPE_DOUBLE: return 8;
+            case TYPE_FLOAT: return 4;
+            case TYPE_SHORT: return 2;
+            case TYPE_OBJECT:
+            case TYPE_OBJECT_PACKED:
+                // Complex object - need to serialize to get size
+                @SuppressWarnings("unchecked")
+                byte[] objBytes = serialize(value, (Class<Object>) value.getClass());
+                cache[idx] = objBytes; // Cache the serialized bytes
+                return 4 + objBytes.length; // length prefix + data
+            default: return 0;
+        }
+    }
+
+    private void writeValueToWriter(FastByteWriter writer, Object value, byte marker, byte[] cachedBytes) throws Exception {
+        writer.writeByte(marker);
+        switch (marker) {
+            case TYPE_NULL: break;
+            case TYPE_STRING:
+                writer.writeShort((short) cachedBytes.length);
+                writer.writeBytes(cachedBytes);
+                break;
+            case TYPE_INT: writer.writeInt((Integer) value); break;
+            case TYPE_LONG: writer.writeLong((Long) value); break;
+            case TYPE_BOOLEAN: writer.writeBoolean((Boolean) value); break;
+            case TYPE_DOUBLE: writer.writeDouble((Double) value); break;
+            case TYPE_FLOAT: writer.writeFloat((Float) value); break;
+            case TYPE_SHORT: writer.writeShort((Short) value); break;
+            case TYPE_OBJECT:
+            case TYPE_OBJECT_PACKED:
+                // Use cached serialized bytes from pass 1
+                if (cachedBytes != null) {
+                    writer.writeInt(cachedBytes.length);
+                    writer.writeBytes(cachedBytes);
+                } else {
+                    // Fallback if not cached
+                    @SuppressWarnings("unchecked")
+                    byte[] nested = serialize(value, (Class<Object>) value.getClass());
+                    writer.writeInt(nested.length);
+                    writer.writeBytes(nested);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Fast value writing with type markers - used for maps and lists.
+     */
+    private void writeValueFast(FastByteWriter writer, Object value) throws Exception {
+        if (value == null) {
+            writer.writeByte(TYPE_NULL);
+        } else if (value instanceof String str) {
+            writer.writeByte(TYPE_STRING);
+            byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
+            writer.writeShort((short) strBytes.length);
+            writer.writeBytes(strBytes);
+        } else if (value instanceof Integer i) {
+            writer.writeByte(TYPE_INT);
+            writer.writeInt(i);
+        } else if (value instanceof Long l) {
+            writer.writeByte(TYPE_LONG);
+            writer.writeLong(l);
+        } else if (value instanceof Boolean b) {
+            writer.writeByte(TYPE_BOOLEAN);
+            writer.writeBoolean(b);
+        } else if (value instanceof Double d) {
+            writer.writeByte(TYPE_DOUBLE);
+            writer.writeDouble(d);
+        } else if (value instanceof Float f) {
+            writer.writeByte(TYPE_FLOAT);
+            writer.writeFloat(f);
+        } else if (value instanceof Short s) {
+            writer.writeByte(TYPE_SHORT);
+            writer.writeShort(s);
+        } else {
+            // Nested object - serialize recursively
+            writer.writeByte(TYPE_OBJECT_PACKED);
+            @SuppressWarnings("unchecked")
+            byte[] nested = serialize(value, (Class<Object>) value.getClass());
+            writer.writeInt(nested.length);
+            writer.writeBytes(nested);
+        }
+    }
+
     private void writeMap(DataOutputStream dos, Map<?, ?> map) throws IOException {
         dos.writeInt(map.size());
         for (Map.Entry<?, ?> entry : map.entrySet()) {
-            writeString(dos, entry.getKey().toString());
+            Object key = entry.getKey();
+            Object value = entry.getValue();
 
-            if (entry.getValue() != null) {
-                writeString(dos, entry.getValue().toString());
-            } else {
-                writeString(dos, "");
+            // Write key with type marker
+            writeValueWithType(dos, key);
+
+            // Write value with type marker
+            writeValueWithType(dos, value);
+        }
+    }
+
+    private void writeValueWithType(DataOutputStream dos, Object value) throws IOException {
+        if (value == null) {
+            dos.writeByte(TYPE_NULL);
+        } else if (value instanceof String) {
+            dos.writeByte(TYPE_STRING);
+            writeString(dos, (String) value);
+        } else if (value instanceof Integer) {
+            dos.writeByte(TYPE_INT);
+            dos.writeInt((Integer) value);
+        } else if (value instanceof Long) {
+            dos.writeByte(TYPE_LONG);
+            dos.writeLong((Long) value);
+        } else if (value instanceof Boolean) {
+            dos.writeByte(TYPE_BOOLEAN);
+            dos.writeBoolean((Boolean) value);
+        } else if (value instanceof Double) {
+            dos.writeByte(TYPE_DOUBLE);
+            dos.writeDouble((Double) value);
+        } else if (value instanceof Float) {
+            dos.writeByte(TYPE_FLOAT);
+            dos.writeFloat((Float) value);
+        } else if (value instanceof Short) {
+            dos.writeByte(TYPE_SHORT);
+            dos.writeShort((Short) value);
+        } else {
+            // For complex types, serialize recursively
+            dos.writeByte(TYPE_OBJECT_PACKED);
+            try {
+                @SuppressWarnings("unchecked")
+                byte[] nested = serialize(value, (Class<Object>) value.getClass());
+                dos.writeInt(nested.length);
+                dos.write(nested);
+            } catch (Exception e) {
+                throw new IOException("Failed to serialize map value", e);
             }
         }
     }
@@ -354,12 +654,20 @@ public class BinarySerializer implements Serializer {
                     totalSize += genericListBytes.length;
                     break;
                 case TYPE_MAP:
-                    byte[] mapBytes = serializeMapFast((Map<?, ?>) value);
+                    byte[] mapBytes = serializeMapContentFast((Map<?, ?>) value);
                     listBytesCache[i] = mapBytes;
                     totalSize += mapBytes.length;
                     break;
                 default:
-                    byte[] nestedBytes = serialize(value);
+                    // Optimize: directly serialize as object if it's a custom type
+                    byte nestedMarker = getTypeMarker(value);
+                    byte[] nestedBytes;
+                    if (nestedMarker == TYPE_OBJECT_PACKED) {
+                        // Fast path: directly call serializeObjectFast
+                        nestedBytes = serializeObjectFast(value);
+                    } else {
+                        nestedBytes = serialize(value);
+                    }
                     listBytesCache[i] = nestedBytes;
                     int nestedLen = nestedBytes.length;
                     totalSize += (nestedLen < 128 ? 1 : nestedLen < 16384 ? 2 : nestedLen < 2097152 ? 3 : 4) + nestedLen;
@@ -571,259 +879,85 @@ public class BinarySerializer implements Serializer {
     private byte[] serializeListFast(List<?> list) throws Exception {
         int size = list.size();
 
-        // Pre-calculate total size and cache string bytes
+        // Fast path for empty lists
+        if (size == 0) {
+            return new byte[] {0, 0, 0, 0, 0}; // size + uniform flag
+        }
+
+        // Single-pass: detect uniformity while collecting data
         Object[] items = new Object[size];
-        byte[] markers = new byte[size];
         byte[][] stringBytes = new byte[size][];
         byte[][] objectBytes = new byte[size][];
 
-        int totalSize = 4; // list size
+        byte firstType = -1;
+        boolean uniform = true;
+        int totalSize = 4 + 1; // size + uniform flag
 
         for (int i = 0; i < size; i++) {
-            Object item = list.get(i);
-            items[i] = item;
-            byte marker = getTypeMarker(item);
-            markers[i] = marker;
+            items[i] = list.get(i);
+            byte itemType = getTypeMarker(items[i]);
 
-            totalSize += 1; // type marker
+            if (i == 0) {
+                firstType = itemType;
+                totalSize += 1;
+            } else if (uniform && itemType != firstType) {
+                uniform = false;
+                totalSize += i; // Add markers we skipped
+            }
 
-            switch (marker) {
-                case TYPE_NULL:
-                    break;
+            if (!uniform) totalSize += 1;
+
+            switch (itemType) {
+                case TYPE_NULL: break;
                 case TYPE_STRING:
-                    byte[] strBytes = ((String) item).getBytes(StandardCharsets.UTF_8);
+                    byte[] strBytes = ((String) items[i]).getBytes(StandardCharsets.UTF_8);
                     stringBytes[i] = strBytes;
                     totalSize += 2 + strBytes.length;
                     break;
-                case TYPE_INT:
-                    totalSize += 4;
-                    break;
-                case TYPE_LONG:
-                    totalSize += 8;
-                    break;
-                case TYPE_BOOLEAN:
-                    totalSize += 1;
-                    break;
-                case TYPE_DOUBLE:
-                    totalSize += 8;
-                    break;
-                case TYPE_FLOAT:
-                    totalSize += 4;
-                    break;
-                case TYPE_SHORT:
-                    totalSize += 2;
-                    break;
+                case TYPE_INT: totalSize += 4; break;
+                case TYPE_LONG: totalSize += 8; break;
+                case TYPE_BOOLEAN: totalSize += 1; break;
+                case TYPE_DOUBLE: totalSize += 8; break;
+                case TYPE_FLOAT: totalSize += 4; break;
+                case TYPE_SHORT: totalSize += 2; break;
                 case TYPE_OBJECT:
                 case TYPE_OBJECT_PACKED:
-                    // Nested object - serialize recursively
-                    byte[] objBytes = serialize(item);
+                    byte[] objBytes = serialize(items[i]);
                     objectBytes[i] = objBytes;
-                    totalSize += 4 + objBytes.length; // length + data
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unsupported type in fast list serialization: " + marker);
-            }
-        }
-
-        // Write to pre-allocated array
-        byte[] result = new byte[totalSize];
-        FastByteWriter writer = FAST_WRITER.get();
-        writer.setBuffer(result);
-
-        writer.writeInt(size);
-
-        for (int i = 0; i < size; i++) {
-            byte marker = markers[i];
-            writer.writeByte(marker);
-
-            switch (marker) {
-                case TYPE_NULL:
-                    break;
-                case TYPE_STRING:
-                    writer.writeString(stringBytes[i]);
-                    break;
-                case TYPE_INT:
-                    writer.writeInt((Integer) items[i]);
-                    break;
-                case TYPE_LONG:
-                    writer.writeLong((Long) items[i]);
-                    break;
-                case TYPE_BOOLEAN:
-                    writer.writeBoolean((Boolean) items[i]);
-                    break;
-                case TYPE_DOUBLE:
-                    writer.writeDouble((Double) items[i]);
-                    break;
-                case TYPE_FLOAT:
-                    writer.writeFloat((Float) items[i]);
-                    break;
-                case TYPE_SHORT:
-                    writer.writeShort((Short) items[i]);
-                    break;
-                case TYPE_OBJECT:
-                case TYPE_OBJECT_PACKED:
-                    byte[] objBytes = objectBytes[i];
-                    writer.writeInt(objBytes.length);
-                    writer.writeBytes(objBytes, objBytes.length);
-                    break;
-            }
-        }
-
-        return result;
-    }
-
-    private byte[] serializeMapFast(Map<?, ?> map) throws Exception {
-        int size = map.size();
-
-        // Pre-calculate total size and cache string bytes
-        Object[] keys = new Object[size];
-        Object[] values = new Object[size];
-        byte[] keyMarkers = new byte[size];
-        byte[] valueMarkers = new byte[size];
-        byte[][] keyStringBytes = new byte[size][];
-        byte[][] valueStringBytes = new byte[size][];
-
-        int totalSize = 4; // map size
-
-        int index = 0;
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
-            Object key = entry.getKey();
-            Object value = entry.getValue();
-            keys[index] = key;
-            values[index] = value;
-
-            byte keyMarker = getTypeMarker(key);
-            byte valueMarker = getTypeMarker(value);
-            keyMarkers[index] = keyMarker;
-            valueMarkers[index] = valueMarker;
-
-            totalSize += 2; // key and value type markers
-
-            // Calculate key size
-            switch (keyMarker) {
-                case TYPE_NULL:
-                    break;
-                case TYPE_STRING:
-                    byte[] keyStrBytes = ((String) key).getBytes(StandardCharsets.UTF_8);
-                    keyStringBytes[index] = keyStrBytes;
-                    totalSize += 2 + keyStrBytes.length;
-                    break;
-                case TYPE_INT:
-                    totalSize += 4;
-                    break;
-                case TYPE_LONG:
-                    totalSize += 8;
-                    break;
-                case TYPE_BOOLEAN:
-                    totalSize += 1;
-                    break;
-                case TYPE_DOUBLE:
-                    totalSize += 8;
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unsupported key type in map serialization: " + keyMarker);
-            }
-
-            // Calculate value size
-            switch (valueMarker) {
-                case TYPE_NULL:
-                    break;
-                case TYPE_STRING:
-                    byte[] valStrBytes = ((String) value).getBytes(StandardCharsets.UTF_8);
-                    valueStringBytes[index] = valStrBytes;
-                    totalSize += 2 + valStrBytes.length;
-                    break;
-                case TYPE_INT:
-                    totalSize += 4;
-                    break;
-                case TYPE_LONG:
-                    totalSize += 8;
-                    break;
-                case TYPE_BOOLEAN:
-                    totalSize += 1;
-                    break;
-                case TYPE_DOUBLE:
-                    totalSize += 8;
-                    break;
-                case TYPE_LIST:
-                case TYPE_LIST_STRING:
-                    byte[] listBytes = serialize(value);
-                    valueStringBytes[index] = listBytes;
-                    totalSize += 4 + listBytes.length;
-                    break;
-                case TYPE_OBJECT:
-                case TYPE_OBJECT_PACKED:
-                    // Nested object - serialize recursively
-                    byte[] objBytes = serialize(value);
-                    valueStringBytes[index] = objBytes;
                     totalSize += 4 + objBytes.length;
                     break;
                 default:
-                    throw new IllegalArgumentException("Unsupported value type in map serialization: " + valueMarker);
+                    throw new IllegalArgumentException("Unsupported type in fast list serialization: " + itemType);
             }
-
-            index++;
         }
 
-        // Write to pre-allocated array
+        // Write optimized format
         byte[] result = new byte[totalSize];
         FastByteWriter writer = FAST_WRITER.get();
         writer.setBuffer(result);
 
         writer.writeInt(size);
+        writer.writeByte(uniform ? (byte)1 : (byte)0);
+        if (uniform) writer.writeByte(firstType);
 
         for (int i = 0; i < size; i++) {
-            // Write key
-            byte keyMarker = keyMarkers[i];
-            writer.writeByte(keyMarker);
+            byte itemType = uniform ? firstType : getTypeMarker(items[i]);
 
-            switch (keyMarker) {
-                case TYPE_NULL:
-                    break;
-                case TYPE_STRING:
-                    writer.writeString(keyStringBytes[i]);
-                    break;
-                case TYPE_INT:
-                    writer.writeInt((Integer) keys[i]);
-                    break;
-                case TYPE_LONG:
-                    writer.writeLong((Long) keys[i]);
-                    break;
-                case TYPE_BOOLEAN:
-                    writer.writeBoolean((Boolean) keys[i]);
-                    break;
-                case TYPE_DOUBLE:
-                    writer.writeDouble((Double) keys[i]);
-                    break;
-            }
+            if (!uniform) writer.writeByte(itemType);
 
-            // Write value
-            byte valueMarker = valueMarkers[i];
-            writer.writeByte(valueMarker);
-
-            switch (valueMarker) {
-                case TYPE_NULL:
-                    break;
-                case TYPE_STRING:
-                    writer.writeString(valueStringBytes[i]);
-                    break;
-                case TYPE_INT:
-                    writer.writeInt((Integer) values[i]);
-                    break;
-                case TYPE_LONG:
-                    writer.writeLong((Long) values[i]);
-                    break;
-                case TYPE_BOOLEAN:
-                    writer.writeBoolean((Boolean) values[i]);
-                    break;
-                case TYPE_DOUBLE:
-                    writer.writeDouble((Double) values[i]);
-                    break;
-                case TYPE_LIST:
-                case TYPE_LIST_STRING, TYPE_OBJECT, TYPE_OBJECT_PACKED:
-                    byte[] listBytes = valueStringBytes[i];
-                    writer.writeInt(listBytes.length);
-                    writer.writeBytes(listBytes, listBytes.length);
+            switch (itemType) {
+                case TYPE_NULL: break;
+                case TYPE_STRING: writer.writeString(stringBytes[i]); break;
+                case TYPE_INT: writer.writeInt((Integer) items[i]); break;
+                case TYPE_LONG: writer.writeLong((Long) items[i]); break;
+                case TYPE_BOOLEAN: writer.writeBoolean((Boolean) items[i]); break;
+                case TYPE_DOUBLE: writer.writeDouble((Double) items[i]); break;
+                case TYPE_FLOAT: writer.writeFloat((Float) items[i]); break;
+                case TYPE_SHORT: writer.writeShort((Short) items[i]); break;
+                case TYPE_OBJECT:
+                case TYPE_OBJECT_PACKED:
+                    writer.writeInt(objectBytes[i].length);
+                    writer.writeBytes(objectBytes[i], objectBytes[i].length);
                     break;
             }
         }

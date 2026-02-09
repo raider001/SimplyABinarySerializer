@@ -13,6 +13,19 @@ class FastByteWriter {
         this.pos = 0;
     }
 
+    void reset(int capacity) {
+        if (buf == null || buf.length < capacity) {
+            buf = new byte[capacity];
+        }
+        pos = 0;
+    }
+
+    byte[] toByteArray() {
+        byte[] result = new byte[pos];
+        System.arraycopy(buf, 0, result, 0, pos);
+        return result;
+    }
+
     void setPosition(int position) {
         this.pos = position;
     }
@@ -79,6 +92,11 @@ class FastByteWriter {
     void writeBytes(byte[] src, int len) {
         System.arraycopy(src, 0, buf, pos, len);
         pos += len;
+    }
+
+    void writeBytes(byte[] src) {
+        System.arraycopy(src, 0, buf, pos, src.length);
+        pos += src.length;
     }
 
     void writeString(byte[] strBytes) {

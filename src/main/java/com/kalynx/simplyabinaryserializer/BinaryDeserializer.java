@@ -65,6 +65,21 @@ public class BinaryDeserializer implements Deserializer {
                 }
                 throw new Exception("Deserialization failed", t);
             }
+        } else if (typeMarker == TYPE_MAP) {
+            // Handle standalone map deserialization
+            FastByteReader reader = new FastByteReader();
+            reader.setData(bytes);
+            reader.readByte(); // Skip type marker
+            try {
+                @SuppressWarnings("unchecked")
+                T result = (T) readMapFast(reader);
+                return result;
+            } catch (Throwable t) {
+                if (t instanceof Exception) {
+                    throw (Exception) t;
+                }
+                throw new Exception("Map deserialization failed", t);
+            }
         }
 
         throw new IllegalArgumentException("Unsupported type marker for deserialization: " + typeMarker);
@@ -244,11 +259,18 @@ public class BinaryDeserializer implements Deserializer {
         int listSize = reader.readInt();
         List<Object> list = new ArrayList<>(listSize);
 
+        // Read uniform flag
+        byte uniformFlag = reader.readByte();
+        boolean uniform = uniformFlag == 1;
+
+        // Read type marker (once if uniform)
+        byte itemType = uniform ? reader.readByte() : 0;
+
         for (int i = 0; i < listSize; i++) {
-            byte itemType = reader.readByte();
+            byte actualType = uniform ? itemType : reader.readByte();
             Object item;
 
-            switch (itemType) {
+            switch (actualType) {
                 case TYPE_NULL:
                     item = null;
                     break;
@@ -291,12 +313,23 @@ public class BinaryDeserializer implements Deserializer {
         int mapSize = reader.readInt();
         Map<Object, Object> map = new HashMap<>(mapSize);
 
-        for (int i = 0; i < mapSize; i++) {
-            byte keyType = reader.readByte();
-            Object key = readValue(reader, keyType);
+        // Read uniform flags
+        byte uniformFlags = reader.readByte();
+        boolean uniformKeys = (uniformFlags & 1) != 0;
+        boolean uniformValues = (uniformFlags & 2) != 0;
 
-            byte valueType = reader.readByte();
-            Object value = readValue(reader, valueType);
+        // Read type markers (once if uniform)
+        byte keyType = uniformKeys ? reader.readByte() : 0;
+        byte valueType = uniformValues ? reader.readByte() : 0;
+
+        for (int i = 0; i < mapSize; i++) {
+            // Read key
+            byte actualKeyType = uniformKeys ? keyType : reader.readByte();
+            Object key = readValue(reader, actualKeyType);
+
+            // Read value
+            byte actualValueType = uniformValues ? valueType : reader.readByte();
+            Object value = readValue(reader, actualValueType);
 
             map.put(key, value);
         }

@@ -417,12 +417,26 @@ public class ComprehensiveSerializationBenchmark {
         long serStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             data[i] = binarySerializer.serialize(createMapObject(i), MapObject.class);
+            if (data[i] == null || data[i].length == 0 || data[i][0] == 0) {
+                throw new RuntimeException("Serialization produced invalid data at iteration " + i +
+                    ": " + (data[i] == null ? "null" : (data[i].length + " bytes, first byte=" + data[i][0])));
+            }
         }
         long serTime = System.nanoTime() - serStart;
 
         long deserStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
-            binaryDeserializer.deserialize(data[i], MapObject.class);
+            try {
+                binaryDeserializer.deserialize(data[i], MapObject.class);
+            } catch (Exception e) {
+                StringBuilder hex = new StringBuilder();
+                for (int j = 0; j < Math.min(20, data[i].length); j++) {
+                    hex.append(String.format("%02X ", data[i][j] & 0xFF));
+                }
+                throw new RuntimeException("Deserialization failed at iteration " + i +
+                    ", length=" + data[i].length + ", first byte=" + (data[i][0] & 0xFF) +
+                    ", hex=" + hex, e);
+            }
         }
         long deserTime = System.nanoTime() - deserStart;
 
