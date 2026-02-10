@@ -8,7 +8,7 @@ import java.util.Map;
 public class MapSerializationDebugTest {
 
     @Test
-    public void debugMapObjectSerialization() throws Exception {
+    public void debugMapObjectSerialization() throws Throwable {
         BinarySerializer serializer = new BinarySerializer();
         BinaryDeserializer deserializer = new BinaryDeserializer();
 

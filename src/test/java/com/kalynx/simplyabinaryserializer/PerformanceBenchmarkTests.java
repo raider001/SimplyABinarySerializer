@@ -26,7 +26,7 @@ public class PerformanceBenchmarkTests {
     }
 
     @Test
-    public void benchmark_SimpleObject_Serialization() throws Exception {
+    public void benchmark_SimpleObject_Serialization() throws Throwable {
         // Warmup
         for (int i = 0; i < WARMUP_ITERATIONS; i++) {
             SimpleObject obj = new SimpleObject(i, "Test" + i, i % 2 == 0, 3.14 + i, 2.71f + i, 123456789L + i, (short) (42 + i % 100));
@@ -56,7 +56,7 @@ public class PerformanceBenchmarkTests {
     }
 
     @Test
-    public void benchmark_SimpleObject_Deserialization() throws Exception {
+    public void benchmark_SimpleObject_Deserialization() throws Throwable {
         // Pre-generate unique serialized objects to avoid caching
         byte[][] binaryBytesArray = new byte[BENCHMARK_ITERATIONS][];
         byte[][] jacksonBytesArray = new byte[BENCHMARK_ITERATIONS][];
@@ -92,7 +92,7 @@ public class PerformanceBenchmarkTests {
     }
 
     @Test
-    public void benchmark_ComplexObject_Serialization() throws Exception {
+    public void benchmark_ComplexObject_Serialization() throws Throwable {
         // Warmup
         for (int i = 0; i < WARMUP_ITERATIONS / 10; i++) {
             ComplexObject obj = new ComplexObject(i);
@@ -123,7 +123,7 @@ public class PerformanceBenchmarkTests {
 
     // @Test
     // TODO: Fix ComplexObject deserialization with nested objects and maps
-    public void benchmark_ComplexObject_Deserialization() throws Exception {
+    public void benchmark_ComplexObject_Deserialization() throws Throwable {
         ComplexObject obj = new ComplexObject();
         byte[] binaryBytes = binarySerializer.serialize(obj, ComplexObject.class);
         byte[] jacksonBytes = jacksonMapper.writeValueAsBytes(obj);
@@ -152,7 +152,7 @@ public class PerformanceBenchmarkTests {
     }
 
     @Test
-    public void benchmark_ListObject_Serialization() throws Exception {
+    public void benchmark_ListObject_Serialization() throws Throwable {
         // Warmup
         for (int i = 0; i < WARMUP_ITERATIONS / 10; i++) {
             ListObject obj = new ListObject(i);

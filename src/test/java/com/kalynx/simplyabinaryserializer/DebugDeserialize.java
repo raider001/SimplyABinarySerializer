@@ -13,7 +13,7 @@ import java.util.Map;
 public class DebugDeserialize {
 
     @Test
-    public void debugDeserialization() throws Exception {
+    public void debugDeserialization() throws Throwable {
         BinarySerializer serializer = new BinarySerializer();
 
         MixedTestObject obj = new MixedTestObject();

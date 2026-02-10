@@ -18,7 +18,7 @@ public class BinaryDeserializerTests {
     }
 
     @Test
-    public void deserialize_TestSimpleObject_deserializesCorrectly() throws Exception {
+    public void deserialize_TestSimpleObject_deserializesCorrectly() throws Throwable {
         // Binary data for TestSimpleObject with id=1, name="Test", active=true, etc.
         byte[] bytes = {
             0x0C, 0x07, 0x21, 0x45, (byte)0xA3, (byte)0xB0,
@@ -53,7 +53,7 @@ public class BinaryDeserializerTests {
     }
 
     @Test
-    public void deserialize_TestObjectWithNestedObject_deserializesCorrectly() throws Exception {
+    public void deserialize_TestObjectWithNestedObject_deserializesCorrectly() throws Throwable {
         // Binary data for object with nested TestSimpleObject
         byte[] bytes = {
             0x0C, 0x01, (byte)0x80,
@@ -81,7 +81,7 @@ public class BinaryDeserializerTests {
 
     // @Test
     // TODO: This test will be properly covered by BinaryRoundTripTests
-    public void deserialize_MixedTestObject_deserializesCorrectly() throws Exception {
+    public void deserialize_MixedTestObject_deserializesCorrectly() throws Throwable {
         // Create actual binary data using the serializer first
         BinarySerializer serializer = new BinarySerializer();
         MixedTestObject original = new MixedTestObject();

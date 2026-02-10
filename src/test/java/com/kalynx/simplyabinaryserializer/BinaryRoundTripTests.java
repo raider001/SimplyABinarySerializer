@@ -20,7 +20,7 @@ public class BinaryRoundTripTests {
     }
 
     @Test
-    public void roundTrip_TestSimpleObject_noDataLoss() throws Exception {
+    public void roundTrip_TestSimpleObject_noDataLoss() throws Throwable {
         // Arrange
         TestSimpleObject original = new TestSimpleObject(1, "Test", true, 3.14, 2.71f, 123456789L, (short) 42);
 
@@ -42,7 +42,7 @@ public class BinaryRoundTripTests {
     }
 
     @Test
-    public void roundTrip_TestObjectWithNestedObject_noDataLoss() throws Exception {
+    public void roundTrip_TestObjectWithNestedObject_noDataLoss() throws Throwable {
         // Arrange
         TestObjectWithNestedObject original = new TestObjectWithNestedObject();
         original.obj = new TestSimpleObject(1, "Test", true, 3.14, 2.71f, 123456789L, (short) 42);
@@ -62,7 +62,7 @@ public class BinaryRoundTripTests {
     }
 
     @Test
-    public void roundTrip_TestListPrimitiveObject_noDataLoss() throws Exception {
+    public void roundTrip_TestListPrimitiveObject_noDataLoss() throws Throwable {
         // Arrange
         TestListPrimitiveObject original = new TestListPrimitiveObject();
 
@@ -83,7 +83,7 @@ public class BinaryRoundTripTests {
     }
 
     @Test
-    public void roundTrip_TestMapPrimitiveObject_noDataLoss() throws Exception {
+    public void roundTrip_TestMapPrimitiveObject_noDataLoss() throws Throwable {
         // Arrange
         TestMapPrimitiveObject original = new TestMapPrimitiveObject();
 
@@ -110,7 +110,7 @@ public class BinaryRoundTripTests {
 
     // @Test
     // TODO: Fix nested object with lists and maps deserialization issue
-    public void roundTrip_MixedTestObject_noDataLoss() throws Exception {
+    public void roundTrip_MixedTestObject_noDataLoss() throws Throwable {
         // Arrange
         MixedTestObject original = new MixedTestObject();
 

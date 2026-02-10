@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class TypedSerializerTests {
 
     @Test
-    public void testSimpleObject() throws Exception {
+    public void testSimpleObject() throws Throwable {
         TypedSerializer<SimpleTestObject> serializer = new TypedSerializer<>(SimpleTestObject.class);
 
         SimpleTestObject obj = new SimpleTestObject();
@@ -30,7 +30,7 @@ public class TypedSerializerTests {
     }
 
     @Test
-    public void testNestedObject() throws Exception {
+    public void testNestedObject() throws Throwable {
         TypedSerializer<ParentObject> serializer = new TypedSerializer<>(ParentObject.class);
 
         ParentObject obj = new ParentObject();
@@ -51,7 +51,7 @@ public class TypedSerializerTests {
     }
 
     @Test
-    public void testListField() throws Exception {
+    public void testListField() throws Throwable {
         TypedSerializer<ObjectWithList> serializer = new TypedSerializer<>(ObjectWithList.class);
 
         ObjectWithList obj = new ObjectWithList();
@@ -72,7 +72,7 @@ public class TypedSerializerTests {
     }
 
     @Test
-    public void testMapField() throws Exception {
+    public void testMapField() throws Throwable {
         TypedSerializer<ObjectWithMap> serializer = new TypedSerializer<>(ObjectWithMap.class);
 
         ObjectWithMap obj = new ObjectWithMap();
@@ -97,7 +97,7 @@ public class TypedSerializerTests {
     }
 
     @Test
-    public void testComplexObject() throws Exception {
+    public void testComplexObject() throws Throwable {
         TypedSerializer<ComplexObject> serializer = new TypedSerializer<>(ComplexObject.class);
 
         ComplexObject obj = new ComplexObject();
@@ -137,7 +137,7 @@ public class TypedSerializerTests {
     }
 
     @Test
-    public void testPerformanceVsGeneric() throws Exception {
+    public void testPerformanceVsGeneric() throws Throwable {
         // Create typed serializer
         TypedSerializer<ComplexObject> typedSerializer = new TypedSerializer<>(ComplexObject.class);
 

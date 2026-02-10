@@ -10,7 +10,7 @@ import java.util.Map;
 public class DebugMixedObject {
 
     @Test
-    public void debugSerializedBytes() throws Exception {
+    public void debugSerializedBytes() throws Throwable {
         BinarySerializer serializer = new BinarySerializer();
 
         MixedTestObject obj = new MixedTestObject();

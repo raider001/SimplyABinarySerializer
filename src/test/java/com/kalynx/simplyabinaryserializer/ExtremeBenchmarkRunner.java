@@ -61,7 +61,7 @@ public class ExtremeBenchmarkRunner {
     }
 
     @Test
-    public void runExtremeBenchmark() throws Exception {
+    public void runExtremeBenchmark() throws Throwable {
         System.out.println("\n" + "=".repeat(120));
         System.out.println("EXTREME PERFORMANCE BENCHMARK - 50 RUNS OF 1,000,000 ITERATIONS");
         System.out.println("=".repeat(120));
@@ -120,7 +120,7 @@ public class ExtremeBenchmarkRunner {
         generateReport(allResults);
     }
 
-    private RunResult runSimpleObjectBenchmark() throws Exception {
+    private RunResult runSimpleObjectBenchmark() throws Throwable {
         // TypedSerializer
         byte[][] typedData = new byte[BENCHMARK_ITERATIONS][];
         long typedSerStart = System.nanoTime();
@@ -216,7 +216,7 @@ public class ExtremeBenchmarkRunner {
         );
     }
 
-    private RunResult runComplexObjectBenchmark() throws Exception {
+    private RunResult runComplexObjectBenchmark() throws Throwable {
         int iterations = BENCHMARK_ITERATIONS / 5;
 
         // TypedSerializer
@@ -314,7 +314,7 @@ public class ExtremeBenchmarkRunner {
         );
     }
 
-    private RunResult runDeepObjectBenchmark() throws Exception {
+    private RunResult runDeepObjectBenchmark() throws Throwable {
         int iterations = BENCHMARK_ITERATIONS / 10; // 100K iterations for deep objects
 
         // TypedSerializer
@@ -412,7 +412,7 @@ public class ExtremeBenchmarkRunner {
         );
     }
 
-    private void generateReport(Map<String, List<RunResult>> allResults) throws Exception {
+    private void generateReport(Map<String, List<RunResult>> allResults) throws Throwable {
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String filename = "benchmark_report_" + timestamp + ".txt";
 
@@ -776,7 +776,7 @@ public class ExtremeBenchmarkRunner {
         return sorted.get(Math.max(0, Math.min(index, sorted.size() - 1)));
     }
 
-    private void warmupAll(SimpleObject obj) throws Exception {
+    private void warmupAll(SimpleObject obj) throws Throwable {
         binarySerializer.serialize(obj, SimpleObject.class);
         typedSimpleSerializer.serialize(obj);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -785,7 +785,7 @@ public class ExtremeBenchmarkRunner {
         output.close();
     }
 
-    private void warmupAllDeep(DeepObject obj) throws Exception {
+    private void warmupAllDeep(DeepObject obj) throws Throwable {
         binarySerializer.serialize(obj, DeepObject.class);
         typedDeepSerializer.serialize(obj);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();

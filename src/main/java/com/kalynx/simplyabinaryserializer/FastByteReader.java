@@ -55,4 +55,11 @@ class FastByteReader {
         System.arraycopy(buf, pos, dest, off, len);
         pos += len;
     }
+
+    byte[] readBytes(int len) {
+        byte[] result = new byte[len];
+        System.arraycopy(buf, pos, result, 0, len);
+        pos += len;
+        return result;
+    }
 }

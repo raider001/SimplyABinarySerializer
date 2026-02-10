@@ -10,7 +10,7 @@ public interface Serializer {
      * Serialize an object to bytes with explicit type parameter.
      * May be faster for known types as it eliminates runtime type lookup.
      */
-    <T> byte[] serialize(T obj, Class<T> type) throws Exception;
+    <T> byte[] serialize(T obj, Class<T> type) throws Throwable;
 
 }
 

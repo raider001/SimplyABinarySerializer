@@ -16,7 +16,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_TestSimpleObject_serializesCorrectly() throws Exception {
+    public void serialize_TestSimpleObject_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for TYPE_OBJECT_PACKED:
          *
@@ -166,7 +166,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_TestListPrimitiveObject_serializesCorrectly() throws Exception {
+    public void serialize_TestListPrimitiveObject_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for Object with Lists:
          *
@@ -373,7 +373,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_TestMapPrimitiveObject_serializesCorrectly() throws Exception {
+    public void serialize_TestMapPrimitiveObject_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for Object with Maps:
          *
@@ -492,7 +492,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_TestListWithComplexObjects_serializesCorrectly() throws Exception {
+    public void serialize_TestListWithComplexObjects_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for Object with Map of Complex Objects:
          *
@@ -719,7 +719,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_TestObjectWithInternalObject_serializesCorrectly() throws Exception {
+    public void serialize_TestObjectWithInternalObject_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for Object with Nested Object:
          *
@@ -879,7 +879,7 @@ public class BinarySerializerTests {
     }
 
     @Test
-    public void serialize_MixedTestObject_serializesCorrectly() throws Exception {
+    public void serialize_MixedTestObject_serializesCorrectly() throws Throwable {
         /*
          * Binary Format Structure for Mixed Object:
          *
