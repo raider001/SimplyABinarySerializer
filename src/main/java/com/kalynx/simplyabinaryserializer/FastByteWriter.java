@@ -39,11 +39,13 @@ class FastByteWriter {
     }
 
     void writeByte(int v) {
+        ensureCapacity(1);
         buf[pos++] = (byte) v;
     }
 
     // Inline varint writing to avoid method call overhead
     void writeVarint(int value) {
+        ensureCapacity(5); // Worst case: 5 bytes for int32
         if (value < 128) {
             buf[pos++] = (byte) value;
         } else if (value < 16384) {
@@ -64,6 +66,7 @@ class FastByteWriter {
     }
 
     void writeInt(int v) {
+        ensureCapacity(4);
         buf[pos++] = (byte) (v >>> 24);
         buf[pos++] = (byte) (v >>> 16);
         buf[pos++] = (byte) (v >>> 8);
@@ -71,6 +74,7 @@ class FastByteWriter {
     }
 
     void writeLong(long v) {
+        ensureCapacity(8);
         buf[pos++] = (byte) (v >>> 56);
         buf[pos++] = (byte) (v >>> 48);
         buf[pos++] = (byte) (v >>> 40);
@@ -82,6 +86,7 @@ class FastByteWriter {
     }
 
     void writeBoolean(boolean v) {
+        ensureCapacity(1);
         buf[pos++] = (byte) (v ? 1 : 0);
     }
 

@@ -276,10 +276,11 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
             w.writeByte((byte) len);
             w.writeBytes(buf, len);
         } else {
-            // Fallback for large strings
+            // Large strings - use int for length
             byte[] b = s.getBytes(StandardCharsets.UTF_8);
-            w.writeByte((byte) Math.min(b.length, 255));
-            w.writeBytes(b, Math.min(b.length, 255));
+            w.writeByte((byte) 255); // Marker for large string
+            w.writeInt(b.length);    // Full length as int
+            w.writeBytes(b, b.length);
         }
     }
 
@@ -448,6 +449,12 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     private String readStr(FastByteReader r) {
         int len = r.readByte() & 0xFF;
+
+        // Check for large string marker
+        if (len == 255) {
+            len = r.readInt(); // Read full length as int
+        }
+
         byte[] b = new byte[len];
         r.readFully(b, 0, len);
         return new String(b, StandardCharsets.UTF_8);

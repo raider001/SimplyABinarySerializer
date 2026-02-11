@@ -137,6 +137,34 @@ public class TypedSerializerTests {
     }
 
     @Test
+    public void testLargeString() throws Throwable {
+        TypedSerializer<ObjectWithLargeString> serializer = new TypedSerializer<>(ObjectWithLargeString.class);
+
+        // Create a 10000 character string
+        StringBuilder sb = new StringBuilder(10000);
+        for (int i = 0; i < 10000; i++) {
+            sb.append((char)('A' + (i % 26))); // Cycle through A-Z
+        }
+        String largeString = sb.toString();
+
+        ObjectWithLargeString obj = new ObjectWithLargeString();
+        obj.id = 999;
+        obj.largeText = largeString;
+        obj.description = "Test object with large string";
+
+        byte[] data = serializer.serialize(obj);
+        ObjectWithLargeString restored = serializer.deserialize(data);
+
+        assertEquals(999, restored.id);
+        assertEquals(largeString, restored.largeText);
+        assertEquals("Test object with large string", restored.description);
+        assertEquals(10000, restored.largeText.length());
+
+        System.out.println("✓ Large string test passed (10000 characters)");
+        System.out.println("  Serialized size: " + data.length + " bytes");
+    }
+
+    @Test
     public void testPerformanceVsGeneric() throws Throwable {
         // Create typed serializer
         TypedSerializer<ComplexObject> typedSerializer = new TypedSerializer<>(ComplexObject.class);
@@ -244,6 +272,12 @@ public class TypedSerializerTests {
         public ChildObject child;
         public List<ChildObject> items;
         public Map<String, String> tags;
+    }
+
+    public static class ObjectWithLargeString {
+        public int id;
+        public String largeText;
+        public String description;
     }
 }
 

@@ -51,6 +51,21 @@ class FastByteReader {
         return (short)(((buf[pos++] & 0xFF) << 8) | (buf[pos++] & 0xFF));
     }
 
+    // Read varint (variable-length integer encoding)
+    int readVarint() {
+        int value = 0;
+        int shift = 0;
+        byte b;
+
+        do {
+            b = buf[pos++];
+            value |= (b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+
+        return value;
+    }
+
     void readFully(byte[] dest, int off, int len) {
         System.arraycopy(buf, pos, dest, off, len);
         pos += len;
