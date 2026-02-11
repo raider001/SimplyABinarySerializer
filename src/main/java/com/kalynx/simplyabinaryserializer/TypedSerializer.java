@@ -2,6 +2,7 @@ package com.kalynx.simplyabinaryserializer;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -10,7 +11,6 @@ import java.util.*;
 
 import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
 
-import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
 
 /**
  * Ultra-fast type-specific serializer with pre-computed schema.
@@ -209,34 +209,16 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         for (int i = 0; i < len; i++) {
             FieldSchema f = fields[i];
 
-            // Specialized handling for primitives to avoid boxing
+            // Primitives: No null marker needed (can't be null)
             switch (f.type) {
-                case INT -> {
-                    w.writeByte(1);
-                    w.writeInt(f.getter != null ? (int) f.getter.invoke(obj) : f.field.getInt(obj));
-                }
-                case LONG -> {
-                    w.writeByte(1);
-                    w.writeLong(f.getter != null ? (long) f.getter.invoke(obj) : f.field.getLong(obj));
-                }
-                case BOOLEAN -> {
-                    w.writeByte(1);
-                    w.writeBoolean(f.getter != null ? (boolean) f.getter.invoke(obj) : f.field.getBoolean(obj));
-                }
-                case DOUBLE -> {
-                    w.writeByte(1);
-                    w.writeDouble(f.getter != null ? (double) f.getter.invoke(obj) : f.field.getDouble(obj));
-                }
-                case FLOAT -> {
-                    w.writeByte(1);
-                    w.writeFloat(f.getter != null ? (float) f.getter.invoke(obj) : f.field.getFloat(obj));
-                }
-                case SHORT -> {
-                    w.writeByte(1);
-                    w.writeShort(f.getter != null ? (short) f.getter.invoke(obj) : f.field.getShort(obj));
-                }
+                case INT -> w.writeInt(f.getter != null ? (int) f.getter.invoke(obj) : f.field.getInt(obj));
+                case LONG -> w.writeLong(f.getter != null ? (long) f.getter.invoke(obj) : f.field.getLong(obj));
+                case BOOLEAN -> w.writeBoolean(f.getter != null ? (boolean) f.getter.invoke(obj) : f.field.getBoolean(obj));
+                case DOUBLE -> w.writeDouble(f.getter != null ? (double) f.getter.invoke(obj) : f.field.getDouble(obj));
+                case FLOAT -> w.writeFloat(f.getter != null ? (float) f.getter.invoke(obj) : f.field.getFloat(obj));
+                case SHORT -> w.writeShort(f.getter != null ? (short) f.getter.invoke(obj) : f.field.getShort(obj));
                 default -> {
-                    // Object types - can be null
+                    // Object types - can be null, need marker
                     Object v = f.getter != null ? f.getter.invoke(obj) : f.field.get(obj);
                     if (v == null) { w.writeByte(0); continue; }
                     w.writeByte(1);
@@ -379,17 +361,14 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     @SuppressWarnings("unchecked")
     private T readObject(FastByteReader r, SerializationSchema schema) throws Throwable {
-        Object instance = schema.clazz.getDeclaredConstructor().newInstance();
+        Object instance = schema.constructor.newInstance();  // Use cached constructor
         final FieldSchema[] fields = schema.fields;
         int len = r.readByte() & 0xFF;
 
         for (int i = 0; i < len; i++) {
-            byte marker = r.readByte();
-            if (marker == 0) continue;
-
             FieldSchema f = fields[i];
 
-            // Specialized handling for primitives to avoid boxing
+            // Primitives: No null marker (can't be null)
             switch (f.type) {
                 case INT -> {
                     int val = r.readInt();
@@ -422,6 +401,9 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                     else f.field.setShort(instance, val);
                 }
                 default -> {
+                    // Object types - have null marker
+                    byte marker = r.readByte();
+                    if (marker == 0) continue;
                     Object value = readValue(r, f);
                     if (f.setter != null) f.setter.invoke(instance, value);
                     else f.field.set(instance, value);
@@ -479,17 +461,14 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     @SuppressWarnings("unchecked")
     private Object readObjectGeneric(FastByteReader r, SerializationSchema schema) throws Throwable {
-        Object instance = schema.clazz.getDeclaredConstructor().newInstance();
+        Object instance = schema.constructor.newInstance();  // Use cached constructor
         final FieldSchema[] fields = schema.fields;
         int len = r.readByte() & 0xFF;
 
         for (int i = 0; i < len; i++) {
-            byte marker = r.readByte();
-            if (marker == 0) continue;
-
             FieldSchema f = fields[i];
 
-            // Specialized handling for primitives to avoid boxing
+            // Primitives: No null marker (can't be null)
             switch (f.type) {
                 case INT -> {
                     int val = r.readInt();
@@ -522,6 +501,9 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                     else f.field.setShort(instance, val);
                 }
                 default -> {
+                    // Object types - have null marker
+                    byte marker = r.readByte();
+                    if (marker == 0) continue;
                     Object value = readValue(r, f);
                     if (f.setter != null) f.setter.invoke(instance, value);
                     else f.field.set(instance, value);
@@ -587,10 +569,18 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     private static class SerializationSchema {
         final Class<?> clazz;
+        final Constructor<?> constructor;  // Cached constructor for fast instantiation
         FieldSchema[] fields;
+
         SerializationSchema(Class<?> clazz, FieldSchema[] fields) {
             this.clazz = clazz;
             this.fields = fields;
+            try {
+                this.constructor = clazz.getDeclaredConstructor();
+                this.constructor.setAccessible(true);
+            } catch (NoSuchMethodException e) {
+                throw new RuntimeException("No default constructor for " + clazz.getName(), e);
+            }
         }
     }
 
