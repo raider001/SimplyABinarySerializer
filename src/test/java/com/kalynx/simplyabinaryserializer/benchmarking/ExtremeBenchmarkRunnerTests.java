@@ -39,9 +39,19 @@ public class ExtremeBenchmarkRunnerTests {
     private static final String SIMPLE_OBJECT = "SimpleObject";
     private static final String COMPLEX_OBJECT = "ComplexObject";
     private static final String DEEP_OBJECT = "DeepObject";
+    private static final String LIST_VARIETY = "ListVarietyObject";
+    private static final String COMPLEX_LIST = "ComplexListObject";
+    private static final String NULLABLE = "NullableObject";
+    private static final String ENUM_OBJECT = "EnumObject";
+    private static final String COMPLEX_MAP = "ComplexMapObject";
+    private static final String MIXED_COMPLEXITY = "MixedComplexityObject";
 
-    private static final String[] LIBRARIES = {TYPED_SERIALIZER, GENERATED_SERIALIZER, KRYO, JACKSON, GSON, FURY};
-    private static final String[] OBJECT_TYPES = {SIMPLE_OBJECT, COMPLEX_OBJECT, DEEP_OBJECT};
+    private static final String[] LIBRARIES = {TYPED_SERIALIZER, GENERATED_SERIALIZER, KRYO, FURY};
+    private static final String[] OBJECT_TYPES = {
+        SIMPLE_OBJECT, COMPLEX_OBJECT, DEEP_OBJECT,
+        LIST_VARIETY, COMPLEX_LIST, NULLABLE,
+        ENUM_OBJECT, COMPLEX_MAP, MIXED_COMPLEXITY
+    };
 
     private static BenchmarkResultManager resultManager;
 
@@ -94,6 +104,15 @@ public class ExtremeBenchmarkRunnerTests {
             kryo.register(SimpleObject.class);
             kryo.register(ComplexObject.class);
             kryo.register(DeepObject.class);
+            kryo.register(ListVarietyObject.class);
+            kryo.register(ComplexListObject.class);
+            kryo.register(NullableObject.class);
+            kryo.register(EnumObject.class);
+            kryo.register(ComplexMapObject.class);
+            kryo.register(MixedComplexityObject.class);
+            kryo.register(NestedObject.class);
+            kryo.register(Priority.class);
+            kryo.register(Status.class);
             kryo.register(HashMap.class);
             kryo.register(ArrayList.class);
             return kryo;
@@ -108,6 +127,15 @@ public class ExtremeBenchmarkRunnerTests {
         fury.register(SimpleObject.class);
         fury.register(ComplexObject.class);
         fury.register(DeepObject.class);
+        fury.register(ListVarietyObject.class);
+        fury.register(ComplexListObject.class);
+        fury.register(NullableObject.class);
+        fury.register(EnumObject.class);
+        fury.register(ComplexMapObject.class);
+        fury.register(MixedComplexityObject.class);
+        fury.register(NestedObject.class);
+        fury.register(Priority.class);
+        fury.register(Status.class);
         fury.register(NestedObject.class);
 
         System.out.println("  Warming up with SimpleObject (10k iterations)...");
@@ -239,6 +267,161 @@ public class ExtremeBenchmarkRunnerTests {
         return obj;
     }
 
+    private static ListVarietyObject createListVarietyObject(int seed) {
+        ListVarietyObject obj = new ListVarietyObject();
+        obj.integers = new ArrayList<>();
+        for (int i = 0; i < 10; i++) obj.integers.add(seed + i);
+
+        obj.longs = new ArrayList<>();
+        for (int i = 0; i < 10; i++) obj.longs.add((long)(seed + i) * 1000);
+
+        obj.strings = new ArrayList<>();
+        for (int i = 0; i < 10; i++) obj.strings.add("Item" + (seed + i));
+
+        obj.doubles = new ArrayList<>();
+        for (int i = 0; i < 10; i++) obj.doubles.add(3.14 * (seed + i));
+
+        obj.booleans = new ArrayList<>();
+        for (int i = 0; i < 10; i++) obj.booleans.add(i % 2 == 0);
+
+        return obj;
+    }
+
+    private static ComplexListObject createComplexListObject(int seed) {
+        ComplexListObject obj = new ComplexListObject();
+        obj.id = "CL" + seed;
+
+        obj.items = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            NestedObject nested = new NestedObject();
+            nested.id = seed * 10 + i;
+            nested.name = "Nested" + i;
+            nested.value = 1.5 * i;
+            obj.items.add(nested);
+        }
+
+        obj.simpleItems = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            obj.simpleItems.add(createSimpleObject(seed * 10 + i));
+        }
+
+        return obj;
+    }
+
+    private static NullableObject createNullableObject(int seed) {
+        NullableObject obj = new NullableObject();
+        obj.requiredField = "Required" + seed;
+
+        // Randomly make fields null (50% null rate)
+        if (seed % 2 == 0) obj.optionalField1 = "Optional1_" + seed;
+        if (seed % 3 == 0) obj.optionalField2 = "Optional2_" + seed;
+        if (seed % 4 == 0) obj.optionalInt = seed * 100;
+
+        if (seed % 5 == 0) {
+            obj.optionalNested = new NestedObject();
+            obj.optionalNested.id = seed;
+            obj.optionalNested.name = "OptionalNested";
+            obj.optionalNested.value = 42.0;
+        }
+
+        if (seed % 6 == 0) {
+            obj.optionalList = new ArrayList<>();
+            obj.optionalList.add("A");
+            obj.optionalList.add("B");
+        }
+
+        if (seed % 7 == 0) {
+            obj.optionalMap = new HashMap<>();
+            obj.optionalMap.put("key1", 1);
+            obj.optionalMap.put("key2", 2);
+        }
+
+        return obj;
+    }
+
+    private static EnumObject createEnumObject(int seed) {
+        EnumObject obj = new EnumObject();
+        obj.id = seed;
+        obj.name = "Task" + seed;
+        obj.priority = Priority.values()[seed % Priority.values().length];
+        obj.status = Status.values()[seed % Status.values().length];
+
+        obj.priorityHistory = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            obj.priorityHistory.add(Priority.values()[(seed + i) % Priority.values().length]);
+        }
+
+        return obj;
+    }
+
+    private static ComplexMapObject createComplexMapObject(int seed) {
+        ComplexMapObject obj = new ComplexMapObject();
+        obj.id = "CM" + seed;
+
+        obj.objectMap = new HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            NestedObject nested = new NestedObject();
+            nested.id = i;
+            nested.name = "MapNested" + i;
+            nested.value = 2.5 * i;
+            obj.objectMap.put("obj" + i, nested);
+        }
+
+        obj.listMap = new HashMap<>();
+        for (int i = 0; i < 3; i++) {
+            List<Integer> list = new ArrayList<>();
+            for (int j = 0; j < 4; j++) list.add((i * 10) + j);
+            obj.listMap.put("list" + i, list);
+        }
+
+        obj.intKeyMap = new HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            obj.intKeyMap.put(seed * 10 + i, "Value" + i);
+        }
+
+        return obj;
+    }
+
+    private static MixedComplexityObject createMixedComplexityObject(int seed) {
+        MixedComplexityObject obj = new MixedComplexityObject();
+        obj.id = seed;
+        obj.name = "Mixed" + seed;
+        obj.priority = Priority.values()[seed % Priority.values().length];
+
+        obj.nestedList = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            NestedObject nested = new NestedObject();
+            nested.id = i;
+            nested.name = "N" + i;
+            nested.value = 1.1 * i;
+            obj.nestedList.add(nested);
+        }
+
+        obj.simpleMap = new HashMap<>();
+        obj.simpleMap.put("a", 1);
+        obj.simpleMap.put("b", 2);
+        obj.simpleMap.put("c", 3);
+
+        obj.complexMap = new HashMap<>();
+        NestedObject n1 = new NestedObject();
+        n1.id = 1;
+        n1.name = "CM1";
+        n1.value = 5.5;
+        obj.complexMap.put("first", n1);
+
+        obj.singleNested = new NestedObject();
+        obj.singleNested.id = 99;
+        obj.singleNested.name = "Single";
+        obj.singleNested.value = 3.14;
+
+        // Leave nullableField as null (50% of the time)
+        if (seed % 2 == 0) {
+            obj.nullableField = "NotNull" + seed;
+        }
+
+        return obj;
+    }
+
     @BeforeEach
     public void setup() {
         typedSimpleSerializer = new TypedSerializer<>(SimpleObject.class);
@@ -256,6 +439,15 @@ public class ExtremeBenchmarkRunnerTests {
             kryo.register(SimpleObject.class);
             kryo.register(ComplexObject.class);
             kryo.register(DeepObject.class);
+            kryo.register(ListVarietyObject.class);
+            kryo.register(ComplexListObject.class);
+            kryo.register(NullableObject.class);
+            kryo.register(EnumObject.class);
+            kryo.register(ComplexMapObject.class);
+            kryo.register(MixedComplexityObject.class);
+            kryo.register(NestedObject.class);
+            kryo.register(Priority.class);
+            kryo.register(Status.class);
             kryo.register(HashMap.class);
             kryo.register(ArrayList.class);
             return kryo;
@@ -272,7 +464,15 @@ public class ExtremeBenchmarkRunnerTests {
         fury.register(SimpleObject.class);
         fury.register(ComplexObject.class);
         fury.register(DeepObject.class);
+        fury.register(ListVarietyObject.class);
+        fury.register(ComplexListObject.class);
+        fury.register(NullableObject.class);
+        fury.register(EnumObject.class);
+        fury.register(ComplexMapObject.class);
+        fury.register(MixedComplexityObject.class);
         fury.register(NestedObject.class);
+        fury.register(Priority.class);
+        fury.register(Status.class);
     }
 
     // ========================================================================
@@ -537,7 +737,7 @@ public class ExtremeBenchmarkRunnerTests {
 
     // ---- Jackson Tests ----
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkJackson_SimpleObject() throws Throwable {
         System.out.println("\n=== Jackson - SimpleObject ===");
 
@@ -551,7 +751,7 @@ public class ExtremeBenchmarkRunnerTests {
         resultManager.printResult("Jackson", "SimpleObject", result);
     }
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkJackson_ComplexObject() throws Throwable {
         System.out.println("\n=== Jackson - ComplexObject ===");
 
@@ -566,7 +766,7 @@ public class ExtremeBenchmarkRunnerTests {
         resultManager.printResult("Jackson", "ComplexObject", result);
     }
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkJackson_DeepObject() throws Throwable {
         System.out.println("\n=== Jackson - DeepObject (5 levels) ===");
 
@@ -583,7 +783,7 @@ public class ExtremeBenchmarkRunnerTests {
 
     // ---- Gson Tests ----
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkGson_SimpleObject() throws Throwable {
         System.out.println("\n=== Gson - SimpleObject ===");
 
@@ -597,7 +797,7 @@ public class ExtremeBenchmarkRunnerTests {
         resultManager.printResult("Gson", "SimpleObject", result);
     }
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkGson_ComplexObject() throws Throwable {
         System.out.println("\n=== Gson - ComplexObject ===");
 
@@ -612,7 +812,7 @@ public class ExtremeBenchmarkRunnerTests {
         resultManager.printResult("Gson", "ComplexObject", result);
     }
 
-    @Test
+    // @Test  // Disabled - focusing on high-performance serializers
     public void benchmarkGson_DeepObject() throws Throwable {
         System.out.println("\n=== Gson - DeepObject (5 levels) ===");
 
@@ -674,6 +874,472 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     // ========================================================================
+    // NEW COMPREHENSIVE SCENARIO TESTS (GeneratedSerializer only for speed)
+    // ========================================================================
+
+    @Test
+    public void benchmarkGeneratedSerializer_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        GeneratedSerializer<ListVarietyObject> serializer = new GeneratedSerializer<>(ListVarietyObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, LIST_VARIETY, result);
+        resultManager.printResult("GeneratedSerializer", "ListVarietyObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        TypedSerializer<ListVarietyObject> serializer = new TypedSerializer<>(ListVarietyObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, LIST_VARIETY, result);
+        resultManager.printResult("TypedSerializer", "ListVarietyObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== Kryo - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, ListVarietyObject.class, iterations);
+        resultManager.recordResult(KRYO, LIST_VARIETY, result);
+        resultManager.printResult("Kryo", "ListVarietyObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkJackson_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== Jackson - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkJackson(objects, ListVarietyObject.class, iterations);
+        resultManager.recordResult(JACKSON, LIST_VARIETY, result);
+        resultManager.printResult("Jackson", "ListVarietyObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkGson_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== Gson - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkGson(objects, ListVarietyObject.class, iterations);
+        resultManager.recordResult(GSON, LIST_VARIETY, result);
+        resultManager.printResult("Gson", "ListVarietyObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - ListVarietyObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        ListVarietyObject[] objects = new ListVarietyObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createListVarietyObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, LIST_VARIETY, result);
+        resultManager.printResult("Apache Fury", "ListVarietyObject", result);
+    }
+
+    @Test
+    public void benchmarkGeneratedSerializer_ComplexListObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        GeneratedSerializer<ComplexListObject> serializer = new GeneratedSerializer<>(ComplexListObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, COMPLEX_LIST, result);
+        resultManager.printResult("GeneratedSerializer", "ComplexListObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_ComplexListObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        TypedSerializer<ComplexListObject> serializer = new TypedSerializer<>(ComplexListObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, COMPLEX_LIST, result);
+        resultManager.printResult("TypedSerializer", "ComplexListObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_ComplexListObject() throws Throwable {
+        System.out.println("\n=== Kryo - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, ComplexListObject.class, iterations);
+        resultManager.recordResult(KRYO, COMPLEX_LIST, result);
+        resultManager.printResult("Kryo", "ComplexListObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkJackson_ComplexListObject() throws Throwable {
+        System.out.println("\n=== Jackson - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkJackson(objects, ComplexListObject.class, iterations);
+        resultManager.recordResult(JACKSON, COMPLEX_LIST, result);
+        resultManager.printResult("Jackson", "ComplexListObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkGson_ComplexListObject() throws Throwable {
+        System.out.println("\n=== Gson - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkGson(objects, ComplexListObject.class, iterations);
+        resultManager.recordResult(GSON, COMPLEX_LIST, result);
+        resultManager.printResult("Gson", "ComplexListObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_ComplexListObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - ComplexListObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexListObject[] objects = new ComplexListObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, COMPLEX_LIST, result);
+        resultManager.printResult("Apache Fury", "ComplexListObject", result);
+    }
+
+    @Test
+    public void benchmarkGeneratedSerializer_NullableObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - NullableObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        NullableObject[] objects = new NullableObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createNullableObject(i);
+        }
+
+        GeneratedSerializer<NullableObject> serializer = new GeneratedSerializer<>(NullableObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, NULLABLE, result);
+        resultManager.printResult("GeneratedSerializer", "NullableObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_NullableObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - NullableObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        NullableObject[] objects = new NullableObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createNullableObject(i);
+        }
+
+        TypedSerializer<NullableObject> serializer = new TypedSerializer<>(NullableObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, NULLABLE, result);
+        resultManager.printResult("TypedSerializer", "NullableObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_NullableObject() throws Throwable {
+        System.out.println("\n=== Kryo - NullableObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        NullableObject[] objects = new NullableObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createNullableObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, NullableObject.class, iterations);
+        resultManager.recordResult(KRYO, NULLABLE, result);
+        resultManager.printResult("Kryo", "NullableObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_NullableObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - NullableObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        NullableObject[] objects = new NullableObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createNullableObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, NULLABLE, result);
+        resultManager.printResult("Apache Fury", "NullableObject", result);
+    }
+
+    @Test
+    public void benchmarkGeneratedSerializer_EnumObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - EnumObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        EnumObject[] objects = new EnumObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createEnumObject(i);
+        }
+
+        GeneratedSerializer<EnumObject> serializer = new GeneratedSerializer<>(EnumObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, ENUM_OBJECT, result);
+        resultManager.printResult("GeneratedSerializer", "EnumObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_EnumObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - EnumObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        EnumObject[] objects = new EnumObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createEnumObject(i);
+        }
+
+        TypedSerializer<EnumObject> serializer = new TypedSerializer<>(EnumObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, ENUM_OBJECT, result);
+        resultManager.printResult("TypedSerializer", "EnumObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_EnumObject() throws Throwable {
+        System.out.println("\n=== Kryo - EnumObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        EnumObject[] objects = new EnumObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createEnumObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, EnumObject.class, iterations);
+        resultManager.recordResult(KRYO, ENUM_OBJECT, result);
+        resultManager.printResult("Kryo", "EnumObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_EnumObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - EnumObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        EnumObject[] objects = new EnumObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createEnumObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, ENUM_OBJECT, result);
+        resultManager.printResult("Apache Fury", "EnumObject", result);
+    }
+
+    @Test
+    public void benchmarkGeneratedSerializer_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        GeneratedSerializer<ComplexMapObject> serializer = new GeneratedSerializer<>(ComplexMapObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, COMPLEX_MAP, result);
+        resultManager.printResult("GeneratedSerializer", "ComplexMapObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        TypedSerializer<ComplexMapObject> serializer = new TypedSerializer<>(ComplexMapObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, COMPLEX_MAP, result);
+        resultManager.printResult("TypedSerializer", "ComplexMapObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== Kryo - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, ComplexMapObject.class, iterations);
+        resultManager.recordResult(KRYO, COMPLEX_MAP, result);
+        resultManager.printResult("Kryo", "ComplexMapObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkJackson_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== Jackson - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkJackson(objects, ComplexMapObject.class, iterations);
+        resultManager.recordResult(JACKSON, COMPLEX_MAP, result);
+        resultManager.printResult("Jackson", "ComplexMapObject", result);
+    }
+
+    // @Test  // Disabled - focusing on high-performance serializers
+    public void benchmarkGson_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== Gson - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkGson(objects, ComplexMapObject.class, iterations);
+        resultManager.recordResult(GSON, COMPLEX_MAP, result);
+        resultManager.printResult("Gson", "ComplexMapObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - ComplexMapObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        ComplexMapObject[] objects = new ComplexMapObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createComplexMapObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, COMPLEX_MAP, result);
+        resultManager.printResult("Apache Fury", "ComplexMapObject", result);
+    }
+
+    @Test
+    public void benchmarkGeneratedSerializer_MixedComplexityObject() throws Throwable {
+        System.out.println("\n=== GeneratedSerializer - MixedComplexityObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createMixedComplexityObject(i);
+        }
+
+        GeneratedSerializer<MixedComplexityObject> serializer = new GeneratedSerializer<>(MixedComplexityObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(GENERATED_SERIALIZER, MIXED_COMPLEXITY, result);
+        resultManager.printResult("GeneratedSerializer", "MixedComplexityObject", result);
+    }
+
+    @Test
+    public void benchmarkTypedSerializer_MixedComplexityObject() throws Throwable {
+        System.out.println("\n=== TypedSerializer - MixedComplexityObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createMixedComplexityObject(i);
+        }
+
+        TypedSerializer<MixedComplexityObject> serializer = new TypedSerializer<>(MixedComplexityObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(TYPED_SERIALIZER, MIXED_COMPLEXITY, result);
+        resultManager.printResult("TypedSerializer", "MixedComplexityObject", result);
+    }
+
+    @Test
+    public void benchmarkKryo_MixedComplexityObject() throws Throwable {
+        System.out.println("\n=== Kryo - MixedComplexityObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createMixedComplexityObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, MixedComplexityObject.class, iterations);
+        resultManager.recordResult(KRYO, MIXED_COMPLEXITY, result);
+        resultManager.printResult("Kryo", "MixedComplexityObject", result);
+    }
+
+    @Test
+    public void benchmarkFury_MixedComplexityObject() throws Throwable {
+        System.out.println("\n=== Apache Fury - MixedComplexityObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 10;
+        MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createMixedComplexityObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
+        resultManager.recordResult(FURY, MIXED_COMPLEXITY, result);
+        resultManager.printResult("Apache Fury", "MixedComplexityObject", result);
+    }
+
+    // ========================================================================
     // HELPER METHODS
     // ========================================================================
 
@@ -717,6 +1383,78 @@ public class ExtremeBenchmarkRunnerTests {
         public double value;
         public DeepObject child;
         public DeepObject() {}
+    }
+
+    // NEW COMPREHENSIVE TEST SCENARIOS
+
+    public enum Priority {
+        LOW, MEDIUM, HIGH, CRITICAL
+    }
+
+    public enum Status {
+        PENDING, IN_PROGRESS, COMPLETED, FAILED
+    }
+
+    // Scenario: Lists with different primitive types
+    public static class ListVarietyObject {
+        public List<Integer> integers;
+        public List<Long> longs;
+        public List<String> strings;
+        public List<Double> doubles;
+        public List<Boolean> booleans;
+        public ListVarietyObject() {}
+    }
+
+    // Scenario: Complex objects in lists
+    public static class ComplexListObject {
+        public String id;
+        public List<NestedObject> items;
+        public List<SimpleObject> simpleItems;
+        public ComplexListObject() {}
+    }
+
+    // Scenario: Null fields (sparse object)
+    public static class NullableObject {
+        public String requiredField;
+        public String optionalField1;
+        public String optionalField2;
+        public Integer optionalInt;
+        public NestedObject optionalNested;
+        public List<String> optionalList;
+        public Map<String, Integer> optionalMap;
+        public NullableObject() {}
+    }
+
+    // Scenario: Enums
+    public static class EnumObject {
+        public int id;
+        public String name;
+        public Priority priority;
+        public Status status;
+        public List<Priority> priorityHistory;
+        public EnumObject() {}
+    }
+
+    // Scenario: Maps with complex values
+    public static class ComplexMapObject {
+        public String id;
+        public Map<String, NestedObject> objectMap;
+        public Map<String, List<Integer>> listMap;
+        public Map<Integer, String> intKeyMap;
+        public ComplexMapObject() {}
+    }
+
+    // Scenario: Mixed complexity (combines multiple patterns)
+    public static class MixedComplexityObject {
+        public int id;
+        public String name;
+        public Priority priority;
+        public List<NestedObject> nestedList;
+        public Map<String, Integer> simpleMap;
+        public Map<String, NestedObject> complexMap;
+        public NestedObject singleNested;
+        public String nullableField;
+        public MixedComplexityObject() {}
     }
 }
 

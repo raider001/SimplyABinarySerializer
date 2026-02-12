@@ -148,6 +148,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 case SHORT -> 3;    // 2 bytes + potential alignment
                 case BOOLEAN -> 2;  // 1 byte + null marker
                 case STRING -> 48;  // Average string ~20 chars, null byte, length
+                case ENUM -> 5;     // 4 bytes (ordinal as int) + potential alignment
                 case LIST -> 96;    // Average list with a few elements
                 case MAP -> 160;    // Average map with a few entries
                 case OBJECT -> 80;  // Average nested object
@@ -367,11 +368,40 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
         switch (fi.type) {
             case INT -> {
-                // w.writeInt(obj.field)
-                cb.aload(1); // writer
-                cb.aload(4); // typed obj
-                cb.getfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_int);
-                cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                // Handle both primitive int and boxed Integer
+                boolean isBoxed = fi.field.getType() == Integer.class;
+                if (isBoxed) {
+                    // Boxed Integer - can be null
+                    cb.aload(4); // typed obj
+                    cb.getfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
+                    cb.astore(5); // Store Integer in local 5
+
+                    cb.aload(5);
+                    Label notNull = cb.newLabel();
+                    Label end = cb.newLabel();
+                    cb.ifnonnull(notNull);
+
+                    // Null - write marker value
+                    cb.aload(1); // writer
+                    cb.ldc(Integer.MIN_VALUE);
+                    cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                    cb.goto_(end);
+
+                    // Not null - unbox and write
+                    cb.labelBinding(notNull);
+                    cb.aload(1); // writer
+                    cb.aload(5); // Integer
+                    cb.invokevirtual(ClassDesc.of("java.lang.Integer"), "intValue", MethodTypeDesc.of(ConstantDescs.CD_int));
+                    cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+
+                    cb.labelBinding(end);
+                } else {
+                    // Primitive int - no null check needed
+                    cb.aload(1); // writer
+                    cb.aload(4); // typed obj
+                    cb.getfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_int);
+                    cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                }
             }
             case LONG -> {
                 cb.aload(1);
@@ -493,6 +523,32 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
                 cb.labelBinding(end);
             }
+            case ENUM -> {
+                // Serialize enum as ordinal (int)
+                cb.aload(4); // typed obj
+                cb.getfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
+                cb.astore(5); // Store enum in local 5
+
+                cb.aload(5);
+                Label notNull = cb.newLabel();
+                Label end = cb.newLabel();
+                cb.ifnonnull(notNull);
+
+                // Null enum - write -1
+                cb.aload(1); // writer
+                cb.iconst_m1();
+                cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                cb.goto_(end);
+
+                // Not null - write ordinal
+                cb.labelBinding(notNull);
+                cb.aload(1); // writer
+                cb.aload(5); // enum
+                cb.invokevirtual(fieldClassDesc, "ordinal", MethodTypeDesc.of(ConstantDescs.CD_int));
+                cb.invokevirtual(CD_FastByteWriter, "writeInt", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+
+                cb.labelBinding(end);
+            }
             case OBJECT -> {
                 cb.aload(4);
                 cb.getfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
@@ -530,11 +586,42 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
         switch (fi.type) {
             case INT -> {
-                // obj.field = r.readInt()
-                cb.aload(4); // typed obj
-                cb.aload(1); // reader
-                cb.invokevirtual(CD_FastByteReader, "readInt", MethodTypeDesc.of(ConstantDescs.CD_int));
-                cb.putfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_int);
+                // Handle both primitive int and boxed Integer
+                boolean isBoxed = fi.field.getType() == Integer.class;
+                if (isBoxed) {
+                    // Boxed Integer - can be null
+                    cb.aload(1); // reader
+                    cb.invokevirtual(CD_FastByteReader, "readInt", MethodTypeDesc.of(ConstantDescs.CD_int));
+                    cb.istore(5); // Store int value in local 5
+
+                    cb.iload(5);
+                    cb.ldc(Integer.MIN_VALUE);
+                    Label notNull = cb.newLabel();
+                    cb.if_icmpne(notNull);
+
+                    // Value is MIN_VALUE (null marker) - set null
+                    cb.aload(4); // typed obj
+                    cb.aconst_null();
+                    cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
+                    Label end = cb.newLabel();
+                    cb.goto_(end);
+
+                    // Not null - box and set
+                    cb.labelBinding(notNull);
+                    cb.aload(4); // typed obj
+                    cb.iload(5); // int value
+                    cb.invokestatic(ClassDesc.of("java.lang.Integer"), "valueOf",
+                        MethodTypeDesc.of(ClassDesc.of("java.lang.Integer"), ConstantDescs.CD_int));
+                    cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
+
+                    cb.labelBinding(end);
+                } else {
+                    // Primitive int - direct read
+                    cb.aload(4); // typed obj
+                    cb.aload(1); // reader
+                    cb.invokevirtual(CD_FastByteReader, "readInt", MethodTypeDesc.of(ConstantDescs.CD_int));
+                    cb.putfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_int);
+                }
             }
             case LONG -> {
                 cb.aload(4);
@@ -614,6 +701,39 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.invokevirtual(CD_GeneratedSerializer, "readMapField",
                         MethodTypeDesc.of(CD_Map, CD_FastByteReader, ConstantDescs.CD_int));
                 cb.putfield(targetClassDesc, fi.field.getName(), CD_Map);
+
+                cb.labelBinding(skip);
+            }
+            case ENUM -> {
+                // Deserialize enum from ordinal
+                cb.aload(1); // reader
+                cb.invokevirtual(CD_FastByteReader, "readInt", MethodTypeDesc.of(ConstantDescs.CD_int));
+                cb.istore(5); // Store ordinal in local 5
+
+                cb.iload(5);
+                Label notNull = cb.newLabel();
+                cb.iconst_m1();
+                cb.if_icmpne(notNull);
+
+                // Ordinal is -1, set null
+                cb.aload(4); // typed obj
+                cb.aconst_null();
+                cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
+                Label skip = cb.newLabel();
+                cb.goto_(skip);
+
+                // Not null - get enum value by ordinal
+                cb.labelBinding(notNull);
+                cb.aload(4); // typed obj
+                cb.aload(3); // GeneratedSerializer (this)
+                cb.checkcast(CD_GeneratedSerializer);
+                cb.aload(1); // reader
+                cb.iload(5); // ordinal
+                cb.ldc(fi.fieldIndex);
+                cb.invokevirtual(CD_GeneratedSerializer, "readEnumField",
+                        MethodTypeDesc.of(ClassDesc.of("java.lang.Enum"), CD_FastByteReader, ConstantDescs.CD_int, ConstantDescs.CD_int));
+                cb.checkcast(fieldClassDesc);
+                cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
 
                 cb.labelBinding(skip);
             }
@@ -738,6 +858,12 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case DOUBLE -> { for (int i = 0; i < size; i++) w.writeDouble((Double) list.get(i)); }
             case FLOAT -> { for (int i = 0; i < size; i++) w.writeFloat((Float) list.get(i)); }
             case SHORT -> { for (int i = 0; i < size; i++) w.writeShort((Short) list.get(i)); }
+            case ENUM -> {
+                for (int i = 0; i < size; i++) {
+                    Enum<?> e = (Enum<?>) list.get(i);
+                    w.writeInt(e == null ? -1 : e.ordinal());
+                }
+            }
             case OBJECT -> {
                 if (fi.nestedSerializer != null) {
                     for (int i = 0; i < size; i++) {
@@ -754,17 +880,37 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     public List<?> readListField(FastByteReader r, int fieldIndex) throws Throwable {
         FieldInfo fi = fieldInfos[fieldIndex];
         int size = r.readInt();
-        List<Object> list = new ArrayList<>(size);
-        if (size == 0) return list;
+        if (size == 0) return new ArrayList<>(0);
+
+        List<Object> list = new ArrayList<>(size); // Pre-sized to avoid resizing
 
         switch (fi.listElementType) {
-            case INT -> { for (int i = 0; i < size; i++) list.add(r.readInt()); }
+            case INT -> {
+                // Read directly without autoboxing overhead where possible
+                for (int i = 0; i < size; i++) list.add(r.readInt());
+            }
             case LONG -> { for (int i = 0; i < size; i++) list.add(r.readLong()); }
-            case STRING -> { for (int i = 0; i < size; i++) list.add(readStr(r)); }
+            case STRING -> {
+                // Optimize for common case of string lists
+                for (int i = 0; i < size; i++) {
+                    list.add(readStr(r));
+                }
+            }
             case BOOLEAN -> { for (int i = 0; i < size; i++) list.add(r.readBoolean()); }
             case DOUBLE -> { for (int i = 0; i < size; i++) list.add(r.readDouble()); }
             case FLOAT -> { for (int i = 0; i < size; i++) list.add(r.readFloat()); }
             case SHORT -> { for (int i = 0; i < size; i++) list.add(r.readShort()); }
+            case ENUM -> {
+                Class<?> enumClass = fi.field.getType();
+                // Extract actual enum type from List<EnumType>
+                Type genericType = fi.field.getGenericType();
+                Class<?> enumType = extractGenericType(genericType, 0);
+                Object[] enumConstants = enumType.getEnumConstants();
+                for (int i = 0; i < size; i++) {
+                    int ordinal = r.readInt();
+                    list.add(ordinal == -1 ? null : enumConstants[ordinal]);
+                }
+            }
             case OBJECT -> {
                 if (fi.nestedSerializer != null) {
                     for (int i = 0; i < size; i++) {
@@ -821,13 +967,31 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     public Map<?, ?> readMapField(FastByteReader r, int fieldIndex) {
         FieldInfo fi = fieldInfos[fieldIndex];
         int size = r.readInt();
-        Map<Object, Object> map = new HashMap<>(size);
-        if (size == 0) return map;
+        if (size == 0) return new HashMap<>(0);
 
-        for (int i = 0; i < size; i++) {
-            Object key = readMapKey(r, fi.mapKeyType);
-            Object value = readMapValue(r, fi.mapValueType);
-            map.put(key, value);
+        // Pre-size with load factor to avoid rehashing
+        Map<Object, Object> map = new HashMap<>((int)(size / 0.75f) + 1);
+
+        // Optimize for common case: String keys with Integer values (most common pattern)
+        if (fi.mapKeyType == FieldType.STRING && fi.mapValueType == FieldType.INT) {
+            for (int i = 0; i < size; i++) {
+                String key = readStr(r);
+                int value = r.readInt();
+                map.put(key, value);
+            }
+        } else if (fi.mapKeyType == FieldType.STRING && fi.mapValueType == FieldType.STRING) {
+            for (int i = 0; i < size; i++) {
+                String key = readStr(r);
+                String value = readStr(r);
+                map.put(key, value);
+            }
+        } else {
+            // Generic path for other type combinations
+            for (int i = 0; i < size; i++) {
+                Object key = readMapKey(r, fi.mapKeyType);
+                Object value = readMapValue(r, fi.mapValueType);
+                map.put(key, value);
+            }
         }
         return map;
     }
@@ -856,6 +1020,13 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case SHORT -> r.readShort();
             default -> null;
         };
+    }
+
+    public Enum<?> readEnumField(FastByteReader r, int ordinal, int fieldIndex) {
+        FieldInfo fi = fieldInfos[fieldIndex];
+        Class<?> enumClass = fi.field.getType();
+        Object[] enumConstants = enumClass.getEnumConstants();
+        return (Enum<?>) enumConstants[ordinal];
     }
 
     public void writeObjectField(FastByteWriter w, Object obj, int fieldIndex) throws Throwable {
@@ -968,6 +1139,8 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             Type genericType = field.getGenericType();
             fi.mapKeyType = determineFieldType(extractGenericType(genericType, 0));
             fi.mapValueType = determineFieldType(extractGenericType(genericType, 1));
+        } else if (fieldType.isEnum()) {
+            fi.type = FieldType.ENUM;
         } else {
             fi.type = FieldType.OBJECT;
             // Use cache to prevent infinite recursion for self-referencing objects
@@ -1010,6 +1183,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         if (clazz == float.class || clazz == Float.class) return FieldType.FLOAT;
         if (clazz == short.class || clazz == Short.class) return FieldType.SHORT;
         if (clazz == String.class) return FieldType.STRING;
+        if (clazz.isEnum()) return FieldType.ENUM;
         return FieldType.OBJECT;
     }
 
@@ -1025,7 +1199,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         GeneratedSerializer<?> nestedSerializer;
     }
 
-    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT }
+    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT, ENUM }
 }
 
 

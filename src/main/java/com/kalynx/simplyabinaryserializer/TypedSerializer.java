@@ -82,6 +82,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                 case LIST -> 64;
                 case MAP -> 128;
                 case OBJECT -> 64;
+                case ENUM -> 6;
             };
         }
         return estimate;
@@ -222,6 +223,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
             case LIST -> "writeFieldList";
             case MAP -> "writeFieldMap";
             case OBJECT -> "writeFieldObject";
+            case ENUM -> "writeFieldEnum";
         };
 
         MethodHandle writer = LOOKUP.findStatic(
@@ -250,6 +252,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
             case LIST -> "readFieldList";
             case MAP -> "readFieldMap";
             case OBJECT -> "readFieldObject";
+            case ENUM -> "readFieldEnum";
         };
 
         MethodHandle reader = LOOKUP.findStatic(
@@ -327,6 +330,16 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         ser.writeNested(w, v, f.nestedSchema);
     }
 
+    private static void writeFieldEnum(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        Enum<?> v = (Enum<?>) f.field.get(obj);
+        if (v == null) {
+            w.writeByte(0);
+            return;
+        }
+        w.writeByte(1);
+        w.writeInt(v.ordinal());
+    }
+
     // ==================== STATIC FIELD READER METHODS ====================
 
     private static void readFieldInt(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
@@ -375,6 +388,17 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         byte marker = r.readByte();
         if (marker == 0) return;
         f.field.set(obj, ser.readNested(r, f.nestedSchema));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void readFieldEnum(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        byte marker = r.readByte();
+        if (marker == 0) return;
+        int ordinal = r.readInt();
+        Object[] enumConstants = f.field.getType().getEnumConstants();
+        if (ordinal >= 0 && ordinal < enumConstants.length) {
+            f.field.set(obj, enumConstants[ordinal]);
+        }
     }
 
     // ==================== SCHEMA BUILDING ====================
@@ -435,6 +459,10 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
             return new FieldSchema(field, FieldType.MAP, mapKeyType, mapValueType, null).withMapSchemas(keySchema, valueSchema);
         }
 
+        if (fieldType.isEnum()) {
+            return new FieldSchema(field, FieldType.ENUM, null, null, null);
+        }
+
         return new FieldSchema(field, FieldType.OBJECT, null, null, buildSchemaRecursive(fieldType, cache));
     }
 
@@ -456,6 +484,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         if (clazz == float.class || clazz == Float.class) return FieldType.FLOAT;
         if (clazz == short.class || clazz == Short.class) return FieldType.SHORT;
         if (clazz == String.class) return FieldType.STRING;
+        if (clazz.isEnum()) return FieldType.ENUM;
         return FieldType.OBJECT;
     }
 
@@ -551,6 +580,10 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                     Object v = f.field.get(obj);
                     if (v == null) { w.writeByte(0); } else { w.writeByte(1); writeNested(w, v, f.nestedSchema); }
                 }
+                case ENUM -> {
+                    Enum<?> v = (Enum<?>) f.field.get(obj);
+                    if (v == null) { w.writeByte(0); } else { w.writeByte(1); w.writeInt(v.ordinal()); }
+                }
             }
         }
     }
@@ -589,6 +622,15 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                 case LIST -> { if (r.readByte() != 0) f.field.set(instance, readList(r, f.listElementType, f.elementSchema)); }
                 case MAP -> { if (r.readByte() != 0) f.field.set(instance, readMap(r, f.mapKeyType, f.mapValueType, f.mapKeySchema, f.mapValueSchema)); }
                 case OBJECT -> { if (r.readByte() != 0) f.field.set(instance, readNested(r, f.nestedSchema)); }
+                case ENUM -> {
+                    if (r.readByte() != 0) {
+                        int ordinal = r.readInt();
+                        Object[] enumConstants = f.field.getType().getEnumConstants();
+                        if (ordinal >= 0 && ordinal < enumConstants.length) {
+                            f.field.set(instance, enumConstants[ordinal]);
+                        }
+                    }
+                }
             }
         }
         return instance;
@@ -755,5 +797,5 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         }
     }
 
-    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT }
+    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT, ENUM }
 }
