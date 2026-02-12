@@ -2,6 +2,7 @@ package com.kalynx.simplyabinaryserializer;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
@@ -11,10 +12,10 @@ import java.util.*;
 
 import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
 
-
 /**
- * Ultra-fast type-specific serializer with pre-computed schema.
- * Eliminates all runtime type detection by pre-computing the entire object graph structure.
+ * Ultra-fast type-specific serializer using MethodHandle composition.
+ * Generates a single composed MethodHandle for all field operations,
+ * allowing the JIT to inline everything into one monomorphic call site.
  *
  * @param <T> The type this serializer handles
  */
@@ -23,6 +24,12 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
     private final Class<T> targetClass;
     private final SerializationSchema schema;
     private final int estimatedSize;
+
+    // Composed MethodHandles for zero-dispatch execution
+    private final MethodHandle composedWriter;
+    private final MethodHandle composedReader;
+
+    private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
     private static final ThreadLocal<FastByteWriter> WRITER_POOL =
             ThreadLocal.withInitial(FastByteWriter::new);
@@ -35,7 +42,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                 ArrayDeque<FastByteWriter> pool = new ArrayDeque<>(8);
                 for (int i = 0; i < 4; i++) {
                     FastByteWriter w = new FastByteWriter();
-                    w.reset(512); // Pre-allocate with larger buffer
+                    w.reset(512);
                     pool.push(w);
                 }
                 return pool;
@@ -48,7 +55,6 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
                 return pool;
             });
 
-    // ThreadLocal buffer for String encoding to avoid repeated allocations
     private static final ThreadLocal<byte[]> STRING_BUFFER =
             ThreadLocal.withInitial(() -> new byte[256]);
 
@@ -56,20 +62,27 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         this.targetClass = targetClass;
         this.schema = buildSchema(targetClass);
         this.estimatedSize = computeEstimatedSize(schema);
+
+        try {
+            this.composedWriter = buildComposedWriter(schema);
+            this.composedReader = buildComposedReader(schema);
+        } catch (Throwable e) {
+            throw new RuntimeException("Failed to build composed MethodHandles for " + targetClass.getName(), e);
+        }
     }
 
     private int computeEstimatedSize(SerializationSchema schema) {
         int estimate = 10;
-        for (int i = 0; i < schema.fields.length; i++) {
-            switch (schema.fields[i].type) {
-                case INT: case FLOAT: estimate += 6; break;
-                case LONG: case DOUBLE: estimate += 10; break;
-                case BOOLEAN: case SHORT: estimate += 4; break;
-                case STRING: estimate += 32; break;
-                case LIST: estimate += 64; break;
-                case MAP: estimate += 128; break;
-                case OBJECT: estimate += 64; break;
-            }
+        for (FieldSchema field : schema.fields) {
+            estimate += switch (field.type) {
+                case INT, FLOAT -> 6;
+                case LONG, DOUBLE -> 10;
+                case BOOLEAN, SHORT -> 4;
+                case STRING -> 32;
+                case LIST -> 64;
+                case MAP -> 128;
+                case OBJECT -> 64;
+            };
         }
         return estimate;
     }
@@ -80,12 +93,16 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
     }
 
     public byte[] serialize(T obj) throws Throwable {
-        if (obj == null) return new byte[] { TYPE_NULL };
+        if (obj == null) return new byte[]{TYPE_NULL};
 
         FastByteWriter writer = WRITER_POOL.get();
         writer.reset(estimatedSize * 2);
         writer.writeByte(TYPE_OBJECT_PACKED);
-        writeObject(writer, obj, schema);
+        writer.writeByte((byte) schema.fields.length);
+
+        // Single monomorphic call - JIT can inline completely
+        composedWriter.invokeExact(writer, obj, this);
+
         return writer.toByteArray();
     }
 
@@ -94,6 +111,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         return type.cast(deserialize(data));
     }
 
+    @SuppressWarnings("unchecked")
     public T deserialize(byte[] data) throws Throwable {
         if (data == null || data.length == 0) return null;
 
@@ -103,7 +121,260 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         byte typeMarker = reader.readByte();
         if (typeMarker == TYPE_NULL) return null;
 
-        return readObject(reader, schema);
+        int fieldCount = reader.readByte() & 0xFF;
+        Object instance = schema.constructor.newInstance();
+
+        // Single monomorphic call - JIT can inline completely
+        composedReader.invokeExact(reader, instance, this);
+
+        return (T) instance;
+    }
+
+    // ==================== COMPOSED METHODHANDLE BUILDING ====================
+
+    /**
+     * Builds a single composed MethodHandle that writes all fields sequentially.
+     * Signature: (FastByteWriter, Object, TypedSerializer) -> void
+     */
+    private MethodHandle buildComposedWriter(SerializationSchema schema) throws Throwable {
+        MethodType targetType = MethodType.methodType(void.class, FastByteWriter.class, Object.class, TypedSerializer.class);
+
+        if (schema.fields.length == 0) {
+            return MethodHandles.empty(targetType);
+        }
+
+        // Get the sequential runner
+        MethodHandle runner = LOOKUP.findStatic(
+                TypedSerializer.class,
+                "runWriterSequence",
+                MethodType.methodType(void.class, MethodHandle[].class, FastByteWriter.class, Object.class, TypedSerializer.class)
+        );
+
+        // Build individual field writers
+        MethodHandle[] fieldWriters = new MethodHandle[schema.fields.length];
+        for (int i = 0; i < schema.fields.length; i++) {
+            fieldWriters[i] = createFieldWriterHandle(schema.fields[i]);
+        }
+
+        // Bind the array of writers
+        return MethodHandles.insertArguments(runner, 0, (Object) fieldWriters);
+    }
+
+    /**
+     * Builds a single composed MethodHandle that reads all fields sequentially.
+     * Signature: (FastByteReader, Object, TypedSerializer) -> void
+     */
+    private MethodHandle buildComposedReader(SerializationSchema schema) throws Throwable {
+        MethodType targetType = MethodType.methodType(void.class, FastByteReader.class, Object.class, TypedSerializer.class);
+
+        if (schema.fields.length == 0) {
+            return MethodHandles.empty(targetType);
+        }
+
+        // Get the sequential runner
+        MethodHandle runner = LOOKUP.findStatic(
+                TypedSerializer.class,
+                "runReaderSequence",
+                MethodType.methodType(void.class, MethodHandle[].class, FastByteReader.class, Object.class, TypedSerializer.class)
+        );
+
+        // Build individual field readers
+        MethodHandle[] fieldReaders = new MethodHandle[schema.fields.length];
+        for (int i = 0; i < schema.fields.length; i++) {
+            fieldReaders[i] = createFieldReaderHandle(schema.fields[i]);
+        }
+
+        // Bind the array of readers
+        return MethodHandles.insertArguments(runner, 0, (Object) fieldReaders);
+    }
+
+    /**
+     * Executes all writer handles in sequence - this method can be inlined by JIT
+     */
+    private static void runWriterSequence(MethodHandle[] writers, FastByteWriter w, Object obj, TypedSerializer<?> ser) throws Throwable {
+        for (int i = 0; i < writers.length; i++) {
+            writers[i].invokeExact(w, obj, ser);
+        }
+    }
+
+    /**
+     * Executes all reader handles in sequence - this method can be inlined by JIT
+     */
+    private static void runReaderSequence(MethodHandle[] readers, FastByteReader r, Object obj, TypedSerializer<?> ser) throws Throwable {
+        for (int i = 0; i < readers.length; i++) {
+            readers[i].invokeExact(r, obj, ser);
+        }
+    }
+
+    /**
+     * Creates a MethodHandle for writing a single field.
+     * Signature: (FastByteWriter, Object, TypedSerializer) -> void
+     */
+    private MethodHandle createFieldWriterHandle(FieldSchema f) throws Throwable {
+        String methodName = switch (f.type) {
+            case INT -> "writeFieldInt";
+            case LONG -> "writeFieldLong";
+            case DOUBLE -> "writeFieldDouble";
+            case FLOAT -> "writeFieldFloat";
+            case SHORT -> "writeFieldShort";
+            case BOOLEAN -> "writeFieldBoolean";
+            case STRING -> "writeFieldString";
+            case LIST -> "writeFieldList";
+            case MAP -> "writeFieldMap";
+            case OBJECT -> "writeFieldObject";
+        };
+
+        MethodHandle writer = LOOKUP.findStatic(
+                TypedSerializer.class,
+                methodName,
+                MethodType.methodType(void.class, FastByteWriter.class, Object.class, TypedSerializer.class, FieldSchema.class)
+        );
+
+        // Bind the FieldSchema so we get: (FastByteWriter, Object, TypedSerializer) -> void
+        return MethodHandles.insertArguments(writer, 3, f);
+    }
+
+    /**
+     * Creates a MethodHandle for reading a single field.
+     * Signature: (FastByteReader, Object, TypedSerializer) -> void
+     */
+    private MethodHandle createFieldReaderHandle(FieldSchema f) throws Throwable {
+        String methodName = switch (f.type) {
+            case INT -> "readFieldInt";
+            case LONG -> "readFieldLong";
+            case DOUBLE -> "readFieldDouble";
+            case FLOAT -> "readFieldFloat";
+            case SHORT -> "readFieldShort";
+            case BOOLEAN -> "readFieldBoolean";
+            case STRING -> "readFieldString";
+            case LIST -> "readFieldList";
+            case MAP -> "readFieldMap";
+            case OBJECT -> "readFieldObject";
+        };
+
+        MethodHandle reader = LOOKUP.findStatic(
+                TypedSerializer.class,
+                methodName,
+                MethodType.methodType(void.class, FastByteReader.class, Object.class, TypedSerializer.class, FieldSchema.class)
+        );
+
+        return MethodHandles.insertArguments(reader, 3, f);
+    }
+
+    // ==================== STATIC FIELD WRITER METHODS ====================
+
+    private static void writeFieldInt(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeInt(f.field.getInt(obj));
+    }
+
+    private static void writeFieldLong(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeLong(f.field.getLong(obj));
+    }
+
+    private static void writeFieldDouble(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeDouble(f.field.getDouble(obj));
+    }
+
+    private static void writeFieldFloat(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeFloat(f.field.getFloat(obj));
+    }
+
+    private static void writeFieldShort(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeShort(f.field.getShort(obj));
+    }
+
+    private static void writeFieldBoolean(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        w.writeBoolean(f.field.getBoolean(obj));
+    }
+
+    private static void writeFieldString(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        String v = (String) f.field.get(obj);
+        if (v == null) {
+            w.writeByte(0);
+            return;
+        }
+        w.writeByte(1);
+        ser.writeStr(w, v);
+    }
+
+    private static void writeFieldList(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        List<?> v = (List<?>) f.field.get(obj);
+        if (v == null) {
+            w.writeByte(0);
+            return;
+        }
+        w.writeByte(1);
+        ser.writeList(w, v, f.listElementType, f.elementSchema);
+    }
+
+    private static void writeFieldMap(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        Map<?, ?> v = (Map<?, ?>) f.field.get(obj);
+        if (v == null) {
+            w.writeByte(0);
+            return;
+        }
+        w.writeByte(1);
+        ser.writeMap(w, v, f.mapKeyType, f.mapValueType, f.mapKeySchema, f.mapValueSchema);
+    }
+
+    private static void writeFieldObject(FastByteWriter w, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        Object v = f.field.get(obj);
+        if (v == null) {
+            w.writeByte(0);
+            return;
+        }
+        w.writeByte(1);
+        ser.writeNested(w, v, f.nestedSchema);
+    }
+
+    // ==================== STATIC FIELD READER METHODS ====================
+
+    private static void readFieldInt(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setInt(obj, r.readInt());
+    }
+
+    private static void readFieldLong(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setLong(obj, r.readLong());
+    }
+
+    private static void readFieldDouble(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setDouble(obj, r.readDouble());
+    }
+
+    private static void readFieldFloat(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setFloat(obj, r.readFloat());
+    }
+
+    private static void readFieldShort(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setShort(obj, r.readShort());
+    }
+
+    private static void readFieldBoolean(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        f.field.setBoolean(obj, r.readBoolean());
+    }
+
+    private static void readFieldString(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        byte marker = r.readByte();
+        if (marker == 0) return;
+        f.field.set(obj, ser.readStr(r));
+    }
+
+    private static void readFieldList(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        byte marker = r.readByte();
+        if (marker == 0) return;
+        f.field.set(obj, ser.readList(r, f.listElementType, f.elementSchema));
+    }
+
+    private static void readFieldMap(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        byte marker = r.readByte();
+        if (marker == 0) return;
+        f.field.set(obj, ser.readMap(r, f.mapKeyType, f.mapValueType, f.mapKeySchema, f.mapValueSchema));
+    }
+
+    private static void readFieldObject(FastByteReader r, Object obj, TypedSerializer<?> ser, FieldSchema f) throws Throwable {
+        byte marker = r.readByte();
+        if (marker == 0) return;
+        f.field.set(obj, ser.readNested(r, f.nestedSchema));
     }
 
     // ==================== SCHEMA BUILDING ====================
@@ -124,7 +395,7 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
         for (Field field : fields) {
             if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) ||
-                java.lang.reflect.Modifier.isTransient(field.getModifiers())) continue;
+                    java.lang.reflect.Modifier.isTransient(field.getModifiers())) continue;
 
             field.setAccessible(true);
             fieldSchemas.add(analyzeField(field, cache));
@@ -137,31 +408,20 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
     private FieldSchema analyzeField(Field field, Map<Class<?>, SerializationSchema> cache) {
         Class<?> fieldType = field.getType();
 
-        // Create MethodHandle getter and setter for fast access
-        MethodHandle getter = null;
-        MethodHandle setter = null;
-        try {
-            MethodHandles.Lookup lookup = MethodHandles.lookup();
-            getter = lookup.unreflectGetter(field);
-            setter = lookup.unreflectSetter(field);
-        } catch (IllegalAccessException e) {
-            // Fallback handled in writeObject/readObject
-        }
-
-        if (fieldType == int.class || fieldType == Integer.class) return new FieldSchema(field, getter, setter, FieldType.INT, null, null, null);
-        if (fieldType == long.class || fieldType == Long.class) return new FieldSchema(field, getter, setter, FieldType.LONG, null, null, null);
-        if (fieldType == boolean.class || fieldType == Boolean.class) return new FieldSchema(field, getter, setter, FieldType.BOOLEAN, null, null, null);
-        if (fieldType == double.class || fieldType == Double.class) return new FieldSchema(field, getter, setter, FieldType.DOUBLE, null, null, null);
-        if (fieldType == float.class || fieldType == Float.class) return new FieldSchema(field, getter, setter, FieldType.FLOAT, null, null, null);
-        if (fieldType == short.class || fieldType == Short.class) return new FieldSchema(field, getter, setter, FieldType.SHORT, null, null, null);
-        if (fieldType == String.class) return new FieldSchema(field, getter, setter, FieldType.STRING, null, null, null);
+        if (fieldType == int.class || fieldType == Integer.class) return new FieldSchema(field, FieldType.INT, null, null, null);
+        if (fieldType == long.class || fieldType == Long.class) return new FieldSchema(field, FieldType.LONG, null, null, null);
+        if (fieldType == boolean.class || fieldType == Boolean.class) return new FieldSchema(field, FieldType.BOOLEAN, null, null, null);
+        if (fieldType == double.class || fieldType == Double.class) return new FieldSchema(field, FieldType.DOUBLE, null, null, null);
+        if (fieldType == float.class || fieldType == Float.class) return new FieldSchema(field, FieldType.FLOAT, null, null, null);
+        if (fieldType == short.class || fieldType == Short.class) return new FieldSchema(field, FieldType.SHORT, null, null, null);
+        if (fieldType == String.class) return new FieldSchema(field, FieldType.STRING, null, null, null);
 
         if (List.class.isAssignableFrom(fieldType)) {
             Type genericType = field.getGenericType();
             Class<?> elementType = extractGenericType(genericType, 0);
             FieldType listElementType = determineFieldType(elementType);
             SerializationSchema elementSchema = listElementType == FieldType.OBJECT ? buildSchemaRecursive(elementType, cache) : null;
-            return new FieldSchema(field, getter, setter, FieldType.LIST, listElementType, null, elementSchema);
+            return new FieldSchema(field, FieldType.LIST, listElementType, null, elementSchema);
         }
 
         if (Map.class.isAssignableFrom(fieldType)) {
@@ -172,10 +432,10 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
             FieldType mapValueType = determineFieldType(valueType);
             SerializationSchema keySchema = mapKeyType == FieldType.OBJECT ? buildSchemaRecursive(keyType, cache) : null;
             SerializationSchema valueSchema = mapValueType == FieldType.OBJECT ? buildSchemaRecursive(valueType, cache) : null;
-            return new FieldSchema(field, getter, setter, FieldType.MAP, mapKeyType, mapValueType, null).withMapSchemas(keySchema, valueSchema);
+            return new FieldSchema(field, FieldType.MAP, mapKeyType, mapValueType, null).withMapSchemas(keySchema, valueSchema);
         }
 
-        return new FieldSchema(field, getter, setter, FieldType.OBJECT, null, null, buildSchemaRecursive(fieldType, cache));
+        return new FieldSchema(field, FieldType.OBJECT, null, null, buildSchemaRecursive(fieldType, cache));
     }
 
     private Class<?> extractGenericType(Type genericType, int index) {
@@ -199,82 +459,33 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         return FieldType.OBJECT;
     }
 
-    // ==================== ULTRA-FAST SERIALIZATION ====================
-
-    private void writeObject(FastByteWriter w, Object obj, SerializationSchema schema) throws Throwable {
-        final FieldSchema[] fields = schema.fields;
-        final int len = fields.length;
-        w.writeByte((byte) len);
-
-        for (int i = 0; i < len; i++) {
-            FieldSchema f = fields[i];
-
-            // Primitives: No null marker needed (can't be null)
-            switch (f.type) {
-                case INT -> w.writeInt(f.getter != null ? (int) f.getter.invoke(obj) : f.field.getInt(obj));
-                case LONG -> w.writeLong(f.getter != null ? (long) f.getter.invoke(obj) : f.field.getLong(obj));
-                case BOOLEAN -> w.writeBoolean(f.getter != null ? (boolean) f.getter.invoke(obj) : f.field.getBoolean(obj));
-                case DOUBLE -> w.writeDouble(f.getter != null ? (double) f.getter.invoke(obj) : f.field.getDouble(obj));
-                case FLOAT -> w.writeFloat(f.getter != null ? (float) f.getter.invoke(obj) : f.field.getFloat(obj));
-                case SHORT -> w.writeShort(f.getter != null ? (short) f.getter.invoke(obj) : f.field.getShort(obj));
-                default -> {
-                    // Object types - can be null, need marker
-                    Object v = f.getter != null ? f.getter.invoke(obj) : f.field.get(obj);
-                    if (v == null) { w.writeByte(0); continue; }
-                    w.writeByte(1);
-                    writeValue(w, v, f);
-                }
-            }
-        }
-    }
-
-    private void writeValue(FastByteWriter w, Object v, FieldSchema f) throws Throwable {
-        switch (f.type) {
-            case INT: w.writeInt((Integer) v); return;
-            case LONG: w.writeLong((Long) v); return;
-            case BOOLEAN: w.writeBoolean((Boolean) v); return;
-            case DOUBLE: w.writeDouble((Double) v); return;
-            case FLOAT: w.writeFloat((Float) v); return;
-            case SHORT: w.writeShort((Short) v); return;
-            case STRING: writeStr(w, (String) v); return;
-            case LIST: writeList(w, (List<?>) v, f); return;
-            case MAP: writeMap(w, (Map<?, ?>) v, f); return;
-            case OBJECT: writeNested(w, v, f.nestedSchema); return;
-        }
-    }
+    // ==================== HELPER METHODS ====================
 
     private void writeStr(FastByteWriter w, String s) {
-        // Fast path for small strings using ThreadLocal buffer
-        int maxBytes = s.length() * 3; // UTF-8 worst case
+        int maxBytes = s.length() * 3;
         if (maxBytes <= 255) {
             byte[] buf = STRING_BUFFER.get();
             if (buf.length < maxBytes) {
                 buf = new byte[maxBytes];
                 STRING_BUFFER.set(buf);
             }
-
-            // Encode directly into buffer
             int len = encodeUTF8(s, buf);
             w.writeByte((byte) len);
             w.writeBytes(buf, len);
         } else {
-            // Large strings - use int for length
             byte[] b = s.getBytes(StandardCharsets.UTF_8);
-            w.writeByte((byte) 255); // Marker for large string
-            w.writeInt(b.length);    // Full length as int
+            w.writeByte((byte) 255);
+            w.writeInt(b.length);
             w.writeBytes(b, b.length);
         }
     }
 
-    // Fast UTF-8 encoding for ASCII-heavy strings
     private int encodeUTF8(String s, byte[] buf) {
         int len = s.length();
         int pos = 0;
-
         for (int i = 0; i < len; i++) {
             char c = s.charAt(i);
             if (c < 0x80) {
-                // ASCII fast path
                 buf[pos++] = (byte) c;
             } else if (c < 0x800) {
                 buf[pos++] = (byte) (0xC0 | (c >> 6));
@@ -288,14 +499,25 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         return pos;
     }
 
+    private String readStr(FastByteReader r) {
+        int len = r.readByte() & 0xFF;
+        if (len == 255) {
+            len = r.readInt();
+        }
+        byte[] b = new byte[len];
+        r.readFully(b, 0, len);
+        return new String(b, StandardCharsets.UTF_8);
+    }
+
     private void writeNested(FastByteWriter w, Object v, SerializationSchema schema) throws Throwable {
         ArrayDeque<FastByteWriter> pool = NESTED_WRITER_POOL.get();
         FastByteWriter nw = pool.poll();
         if (nw == null) nw = new FastByteWriter();
 
         try {
-            nw.reset(256); // Larger initial buffer for nested objects
-            writeObject(nw, v, schema);
+            nw.reset(256);
+            nw.writeByte((byte) schema.fields.length);
+            writeObjectWithSchema(nw, v, schema);
             int len = nw.getPosition();
             w.writeByte((byte) len);
             w.writeBytes(nw.getBuffer(), len);
@@ -304,142 +526,33 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         }
     }
 
-    private void writeList(FastByteWriter w, List<?> list, FieldSchema f) throws Throwable {
-        int size = list.size();
-        w.writeInt(size);
-        if (size == 0) return;
-
-        FieldType t = f.listElementType;
-        SerializationSchema s = f.elementSchema;
-
-        switch (t) {
-            case INT: for (int i = 0; i < size; i++) w.writeInt((Integer) list.get(i)); return;
-            case LONG: for (int i = 0; i < size; i++) w.writeLong((Long) list.get(i)); return;
-            case STRING: for (int i = 0; i < size; i++) writeStr(w, (String) list.get(i)); return;
-            case BOOLEAN: for (int i = 0; i < size; i++) w.writeBoolean((Boolean) list.get(i)); return;
-            case OBJECT: for (int i = 0; i < size; i++) writeNested(w, list.get(i), s); return;
-            default: for (int i = 0; i < size; i++) writeElem(w, list.get(i), t, s);
-        }
-    }
-
-    private void writeMap(FastByteWriter w, Map<?, ?> map, FieldSchema f) throws Throwable {
-        int size = map.size();
-        w.writeInt(size);
-        if (size == 0) return;
-
-        FieldType kt = f.mapKeyType, vt = f.mapValueType;
-        SerializationSchema ks = f.mapKeySchema, vs = f.mapValueSchema;
-
-        if (kt == FieldType.STRING && vt == FieldType.INT) {
-            for (Map.Entry<?, ?> e : map.entrySet()) { writeStr(w, (String) e.getKey()); w.writeInt((Integer) e.getValue()); }
-            return;
-        }
-        if (kt == FieldType.STRING && vt == FieldType.STRING) {
-            for (Map.Entry<?, ?> e : map.entrySet()) { writeStr(w, (String) e.getKey()); writeStr(w, (String) e.getValue()); }
-            return;
-        }
-        for (Map.Entry<?, ?> e : map.entrySet()) {
-            writeElem(w, e.getKey(), kt, ks);
-            writeElem(w, e.getValue(), vt, vs);
-        }
-    }
-
-    private void writeElem(FastByteWriter w, Object v, FieldType t, SerializationSchema s) throws Throwable {
-        switch (t) {
-            case INT: w.writeInt((Integer) v); break;
-            case LONG: w.writeLong((Long) v); break;
-            case BOOLEAN: w.writeBoolean((Boolean) v); break;
-            case DOUBLE: w.writeDouble((Double) v); break;
-            case FLOAT: w.writeFloat((Float) v); break;
-            case SHORT: w.writeShort((Short) v); break;
-            case STRING: writeStr(w, (String) v); break;
-            case OBJECT: writeNested(w, v, s); break;
-        }
-    }
-
-    // ==================== ULTRA-FAST DESERIALIZATION ====================
-
-    @SuppressWarnings("unchecked")
-    private T readObject(FastByteReader r, SerializationSchema schema) throws Throwable {
-        Object instance = schema.constructor.newInstance();  // Use cached constructor
-        final FieldSchema[] fields = schema.fields;
-        int len = r.readByte() & 0xFF;
-
-        for (int i = 0; i < len; i++) {
-            FieldSchema f = fields[i];
-
-            // Primitives: No null marker (can't be null)
+    private void writeObjectWithSchema(FastByteWriter w, Object obj, SerializationSchema schema) throws Throwable {
+        for (FieldSchema f : schema.fields) {
             switch (f.type) {
-                case INT -> {
-                    int val = r.readInt();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setInt(instance, val);
+                case INT -> w.writeInt(f.field.getInt(obj));
+                case LONG -> w.writeLong(f.field.getLong(obj));
+                case DOUBLE -> w.writeDouble(f.field.getDouble(obj));
+                case FLOAT -> w.writeFloat(f.field.getFloat(obj));
+                case SHORT -> w.writeShort(f.field.getShort(obj));
+                case BOOLEAN -> w.writeBoolean(f.field.getBoolean(obj));
+                case STRING -> {
+                    String v = (String) f.field.get(obj);
+                    if (v == null) { w.writeByte(0); } else { w.writeByte(1); writeStr(w, v); }
                 }
-                case LONG -> {
-                    long val = r.readLong();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setLong(instance, val);
+                case LIST -> {
+                    List<?> v = (List<?>) f.field.get(obj);
+                    if (v == null) { w.writeByte(0); } else { w.writeByte(1); writeList(w, v, f.listElementType, f.elementSchema); }
                 }
-                case BOOLEAN -> {
-                    boolean val = r.readBoolean();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setBoolean(instance, val);
+                case MAP -> {
+                    Map<?, ?> v = (Map<?, ?>) f.field.get(obj);
+                    if (v == null) { w.writeByte(0); } else { w.writeByte(1); writeMap(w, v, f.mapKeyType, f.mapValueType, f.mapKeySchema, f.mapValueSchema); }
                 }
-                case DOUBLE -> {
-                    double val = r.readDouble();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setDouble(instance, val);
-                }
-                case FLOAT -> {
-                    float val = r.readFloat();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setFloat(instance, val);
-                }
-                case SHORT -> {
-                    short val = r.readShort();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setShort(instance, val);
-                }
-                default -> {
-                    // Object types - have null marker
-                    byte marker = r.readByte();
-                    if (marker == 0) continue;
-                    Object value = readValue(r, f);
-                    if (f.setter != null) f.setter.invoke(instance, value);
-                    else f.field.set(instance, value);
+                case OBJECT -> {
+                    Object v = f.field.get(obj);
+                    if (v == null) { w.writeByte(0); } else { w.writeByte(1); writeNested(w, v, f.nestedSchema); }
                 }
             }
         }
-        return (T) instance;
-    }
-
-    private Object readValue(FastByteReader r, FieldSchema f) throws Throwable {
-        switch (f.type) {
-            case INT: return r.readInt();
-            case LONG: return r.readLong();
-            case BOOLEAN: return r.readBoolean();
-            case DOUBLE: return r.readDouble();
-            case FLOAT: return r.readFloat();
-            case SHORT: return r.readShort();
-            case STRING: return readStr(r);
-            case LIST: return readList(r, f);
-            case MAP: return readMap(r, f);
-            case OBJECT: return readNested(r, f.nestedSchema);
-            default: return null;
-        }
-    }
-
-    private String readStr(FastByteReader r) {
-        int len = r.readByte() & 0xFF;
-
-        // Check for large string marker
-        if (len == 255) {
-            len = r.readInt(); // Read full length as int
-        }
-
-        byte[] b = new byte[len];
-        r.readFully(b, 0, len);
-        return new String(b, StandardCharsets.UTF_8);
     }
 
     private Object readNested(FastByteReader r, SerializationSchema schema) throws Throwable {
@@ -453,128 +566,158 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
         try {
             nr.setData(b);
-            return readObjectGeneric(nr, schema);
+            return readObjectWithSchema(nr, schema);
         } finally {
             if (pool.size() < 8) pool.push(nr);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private Object readObjectGeneric(FastByteReader r, SerializationSchema schema) throws Throwable {
-        Object instance = schema.constructor.newInstance();  // Use cached constructor
-        final FieldSchema[] fields = schema.fields;
-        int len = r.readByte() & 0xFF;
+    private Object readObjectWithSchema(FastByteReader r, SerializationSchema schema) throws Throwable {
+        Object instance = schema.constructor.newInstance();
+        int fieldCount = r.readByte() & 0xFF;
 
-        for (int i = 0; i < len; i++) {
-            FieldSchema f = fields[i];
-
-            // Primitives: No null marker (can't be null)
+        for (int i = 0; i < fieldCount && i < schema.fields.length; i++) {
+            FieldSchema f = schema.fields[i];
             switch (f.type) {
-                case INT -> {
-                    int val = r.readInt();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setInt(instance, val);
-                }
-                case LONG -> {
-                    long val = r.readLong();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setLong(instance, val);
-                }
-                case BOOLEAN -> {
-                    boolean val = r.readBoolean();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setBoolean(instance, val);
-                }
-                case DOUBLE -> {
-                    double val = r.readDouble();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setDouble(instance, val);
-                }
-                case FLOAT -> {
-                    float val = r.readFloat();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setFloat(instance, val);
-                }
-                case SHORT -> {
-                    short val = r.readShort();
-                    if (f.setter != null) f.setter.invoke(instance, val);
-                    else f.field.setShort(instance, val);
-                }
-                default -> {
-                    // Object types - have null marker
-                    byte marker = r.readByte();
-                    if (marker == 0) continue;
-                    Object value = readValue(r, f);
-                    if (f.setter != null) f.setter.invoke(instance, value);
-                    else f.field.set(instance, value);
-                }
+                case INT -> f.field.setInt(instance, r.readInt());
+                case LONG -> f.field.setLong(instance, r.readLong());
+                case DOUBLE -> f.field.setDouble(instance, r.readDouble());
+                case FLOAT -> f.field.setFloat(instance, r.readFloat());
+                case SHORT -> f.field.setShort(instance, r.readShort());
+                case BOOLEAN -> f.field.setBoolean(instance, r.readBoolean());
+                case STRING -> { if (r.readByte() != 0) f.field.set(instance, readStr(r)); }
+                case LIST -> { if (r.readByte() != 0) f.field.set(instance, readList(r, f.listElementType, f.elementSchema)); }
+                case MAP -> { if (r.readByte() != 0) f.field.set(instance, readMap(r, f.mapKeyType, f.mapValueType, f.mapKeySchema, f.mapValueSchema)); }
+                case OBJECT -> { if (r.readByte() != 0) f.field.set(instance, readNested(r, f.nestedSchema)); }
             }
         }
         return instance;
     }
 
-    private List<Object> readList(FastByteReader r, FieldSchema f) throws Throwable {
+    private void writeList(FastByteWriter w, List<?> list, FieldType elemType, SerializationSchema elemSchema) throws Throwable {
+        int size = list.size();
+        w.writeInt(size);
+        if (size == 0) return;
+
+        switch (elemType) {
+            case INT -> { for (int i = 0; i < size; i++) w.writeInt((Integer) list.get(i)); }
+            case LONG -> { for (int i = 0; i < size; i++) w.writeLong((Long) list.get(i)); }
+            case STRING -> { for (int i = 0; i < size; i++) writeStr(w, (String) list.get(i)); }
+            case BOOLEAN -> { for (int i = 0; i < size; i++) w.writeBoolean((Boolean) list.get(i)); }
+            case DOUBLE -> { for (int i = 0; i < size; i++) w.writeDouble((Double) list.get(i)); }
+            case FLOAT -> { for (int i = 0; i < size; i++) w.writeFloat((Float) list.get(i)); }
+            case SHORT -> { for (int i = 0; i < size; i++) w.writeShort((Short) list.get(i)); }
+            case OBJECT -> { for (int i = 0; i < size; i++) writeNested(w, list.get(i), elemSchema); }
+            default -> {}
+        }
+    }
+
+    private List<Object> readList(FastByteReader r, FieldType elemType, SerializationSchema elemSchema) throws Throwable {
         int size = r.readInt();
         List<Object> list = new ArrayList<>(size);
         if (size == 0) return list;
 
-        FieldType t = f.listElementType;
-        SerializationSchema s = f.elementSchema;
+        switch (elemType) {
+            case INT -> { for (int i = 0; i < size; i++) list.add(r.readInt()); }
+            case LONG -> { for (int i = 0; i < size; i++) list.add(r.readLong()); }
+            case STRING -> { for (int i = 0; i < size; i++) list.add(readStr(r)); }
+            case BOOLEAN -> { for (int i = 0; i < size; i++) list.add(r.readBoolean()); }
+            case DOUBLE -> { for (int i = 0; i < size; i++) list.add(r.readDouble()); }
+            case FLOAT -> { for (int i = 0; i < size; i++) list.add(r.readFloat()); }
+            case SHORT -> { for (int i = 0; i < size; i++) list.add(r.readShort()); }
+            case OBJECT -> { for (int i = 0; i < size; i++) list.add(readNested(r, elemSchema)); }
+            default -> {}
+        }
+        return list;
+    }
 
-        switch (t) {
-            case INT: for (int i = 0; i < size; i++) list.add(r.readInt()); return list;
-            case LONG: for (int i = 0; i < size; i++) list.add(r.readLong()); return list;
-            case STRING: for (int i = 0; i < size; i++) list.add(readStr(r)); return list;
-            case BOOLEAN: for (int i = 0; i < size; i++) list.add(r.readBoolean()); return list;
-            case OBJECT: for (int i = 0; i < size; i++) list.add(readNested(r, s)); return list;
-            default: for (int i = 0; i < size; i++) list.add(readElem(r, t, s)); return list;
+    private void writeMap(FastByteWriter w, Map<?, ?> map, FieldType keyType, FieldType valType,
+                          SerializationSchema keySchema, SerializationSchema valSchema) throws Throwable {
+        int size = map.size();
+        w.writeInt(size);
+        if (size == 0) return;
+
+        if (keyType == FieldType.STRING && valType == FieldType.INT) {
+            for (Map.Entry<?, ?> e : map.entrySet()) {
+                writeStr(w, (String) e.getKey());
+                w.writeInt((Integer) e.getValue());
+            }
+            return;
+        }
+        if (keyType == FieldType.STRING && valType == FieldType.STRING) {
+            for (Map.Entry<?, ?> e : map.entrySet()) {
+                writeStr(w, (String) e.getKey());
+                writeStr(w, (String) e.getValue());
+            }
+            return;
+        }
+
+        for (Map.Entry<?, ?> e : map.entrySet()) {
+            writeElem(w, e.getKey(), keyType, keySchema);
+            writeElem(w, e.getValue(), valType, valSchema);
         }
     }
 
-    private Map<Object, Object> readMap(FastByteReader r, FieldSchema f) throws Throwable {
+    private Map<Object, Object> readMap(FastByteReader r, FieldType keyType, FieldType valType,
+                                         SerializationSchema keySchema, SerializationSchema valSchema) throws Throwable {
         int size = r.readInt();
         Map<Object, Object> map = new HashMap<>(size);
         if (size == 0) return map;
 
-        FieldType kt = f.mapKeyType, vt = f.mapValueType;
-        SerializationSchema ks = f.mapKeySchema, vs = f.mapValueSchema;
-
-        if (kt == FieldType.STRING && vt == FieldType.INT) {
+        if (keyType == FieldType.STRING && valType == FieldType.INT) {
             for (int i = 0; i < size; i++) map.put(readStr(r), r.readInt());
             return map;
         }
-        if (kt == FieldType.STRING && vt == FieldType.STRING) {
+        if (keyType == FieldType.STRING && valType == FieldType.STRING) {
             for (int i = 0; i < size; i++) map.put(readStr(r), readStr(r));
             return map;
         }
-        for (int i = 0; i < size; i++) map.put(readElem(r, kt, ks), readElem(r, vt, vs));
+
+        for (int i = 0; i < size; i++) {
+            map.put(readElem(r, keyType, keySchema), readElem(r, valType, valSchema));
+        }
         return map;
     }
 
-    private Object readElem(FastByteReader r, FieldType t, SerializationSchema s) throws Throwable {
+    private void writeElem(FastByteWriter w, Object v, FieldType t, SerializationSchema s) throws Throwable {
         switch (t) {
-            case INT: return r.readInt();
-            case LONG: return r.readLong();
-            case BOOLEAN: return r.readBoolean();
-            case DOUBLE: return r.readDouble();
-            case FLOAT: return r.readFloat();
-            case SHORT: return r.readShort();
-            case STRING: return readStr(r);
-            case OBJECT: return readNested(r, s);
-            default: return null;
+            case INT -> w.writeInt((Integer) v);
+            case LONG -> w.writeLong((Long) v);
+            case BOOLEAN -> w.writeBoolean((Boolean) v);
+            case DOUBLE -> w.writeDouble((Double) v);
+            case FLOAT -> w.writeFloat((Float) v);
+            case SHORT -> w.writeShort((Short) v);
+            case STRING -> writeStr(w, (String) v);
+            case OBJECT -> writeNested(w, v, s);
+            default -> {}
         }
+    }
+
+    private Object readElem(FastByteReader r, FieldType t, SerializationSchema s) throws Throwable {
+        return switch (t) {
+            case INT -> r.readInt();
+            case LONG -> r.readLong();
+            case BOOLEAN -> r.readBoolean();
+            case DOUBLE -> r.readDouble();
+            case FLOAT -> r.readFloat();
+            case SHORT -> r.readShort();
+            case STRING -> readStr(r);
+            case OBJECT -> readNested(r, s);
+            default -> null;
+        };
     }
 
     // ==================== SCHEMA CLASSES ====================
 
     private static class SerializationSchema {
         final Class<?> clazz;
-        final Constructor<?> constructor;  // Cached constructor for fast instantiation
+        final Constructor<?> constructor;
         FieldSchema[] fields;
 
         SerializationSchema(Class<?> clazz, FieldSchema[] fields) {
             this.clazz = clazz;
             this.fields = fields;
+
             try {
                 this.constructor = clazz.getDeclaredConstructor();
                 this.constructor.setAccessible(true);
@@ -586,8 +729,6 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     private static class FieldSchema {
         final Field field;
-        final MethodHandle getter;  // Fast getter - replaces field.get()
-        final MethodHandle setter;  // Fast setter - replaces field.set()
         final FieldType type;
         final FieldType listElementType;
         final FieldType mapKeyType;
@@ -597,10 +738,8 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
         SerializationSchema mapKeySchema;
         SerializationSchema mapValueSchema;
 
-        FieldSchema(Field field, MethodHandle getter, MethodHandle setter, FieldType type, FieldType listElementType, FieldType mapValueType, SerializationSchema nestedSchema) {
+        FieldSchema(Field field, FieldType type, FieldType listElementType, FieldType mapValueType, SerializationSchema nestedSchema) {
             this.field = field;
-            this.getter = getter;
-            this.setter = setter;
             this.type = type;
             this.listElementType = listElementType;
             this.mapKeyType = listElementType;
@@ -618,6 +757,3 @@ public class TypedSerializer<T> implements Serializer, Deserializer {
 
     private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT }
 }
-
-
-

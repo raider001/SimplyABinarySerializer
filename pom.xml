@@ -111,6 +111,14 @@
             <version>2.10.1</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Apache Fury - Fast serialization -->
+        <dependency>
+            <groupId>org.apache.fury</groupId>
+            <artifactId>fury-core</artifactId>
+            <version>0.9.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

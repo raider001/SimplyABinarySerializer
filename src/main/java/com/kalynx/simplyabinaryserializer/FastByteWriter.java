@@ -66,6 +66,10 @@ class FastByteWriter {
         buf[pos++] = (byte) v;
     }
 
+    void writeShort(short v) {
+        writeShort((int) v);
+    }
+
     void writeInt(int v) {
         ensureCapacity(4);
         buf[pos++] = (byte) (v >>> 24);
