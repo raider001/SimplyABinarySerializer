@@ -880,7 +880,9 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         }
 
         // Write nested object directly using the serializer's writer
-        serializer.generatedWriter.write(w, obj, serializer);
+        @SuppressWarnings("unchecked")
+        GeneratedSerializer<Object> objSerializer = (GeneratedSerializer<Object>) serializer;
+        objSerializer.generatedWriter.write(w, obj, objSerializer);
     }
 
     public Object readObjectField(FastByteReader r, int fieldIndex) throws Throwable {
@@ -908,14 +910,11 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         }
 
         // Create instance and read directly using MethodHandle
-        Object instance = serializer.constructorHandle.invoke();
-        serializer.generatedReader.read(r, instance, serializer);
+        @SuppressWarnings("unchecked")
+        GeneratedSerializer<Object> objSerializer = (GeneratedSerializer<Object>) serializer;
+        Object instance = objSerializer.constructorHandle.invoke();
+        objSerializer.generatedReader.read(r, instance, objSerializer);
         return instance;
-    }
-                serializerCache.put(fieldType, serializer);
-            }
-            return serializer.deserializeInternal(nested);
-        }
     }
 
     // ==================== FIELD ANALYSIS ====================
