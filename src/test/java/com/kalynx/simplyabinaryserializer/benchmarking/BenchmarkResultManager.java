@@ -57,6 +57,9 @@ public class BenchmarkResultManager {
             writer.println("**Total test runs:** " + countTotalRuns());
             writer.println();
 
+            // Generate summary grid at the top
+            generateSummaryGrid(writer, libraries, objectTypes);
+
             // Generate comparison tables for each object type
             for (String objectType : objectTypes) {
                 writer.println("## " + objectType);
@@ -185,6 +188,58 @@ public class BenchmarkResultManager {
                 writer.println();
             }
         }
+    }
+
+    private void generateSummaryGrid(PrintWriter writer, String[] libraries, String[] objectTypes) {
+        writer.println("## Summary: Round-Trip Performance (ns/op)");
+        writer.println();
+        writer.println("*Lower is better. Best result per scenario is highlighted in **bold**.*");
+        writer.println();
+
+        // Build header
+        StringBuilder header = new StringBuilder("| Scenario |");
+        StringBuilder separator = new StringBuilder("|----------|");
+        for (String library : libraries) {
+            header.append(" ").append(library).append(" |");
+            separator.append("----------:|");
+        }
+        writer.println(header);
+        writer.println(separator);
+
+        // For each scenario/object type
+        for (String objectType : objectTypes) {
+            Map<String, Double> libraryRoundTrips = new LinkedHashMap<>();
+            double bestRoundTrip = Double.MAX_VALUE;
+
+            // Collect round-trip times for all libraries
+            for (String library : libraries) {
+                List<SerializationResult> results = benchmarkResults.get(library).get(objectType);
+                if (!results.isEmpty()) {
+                    LibraryStats stats = calculateLibraryStats(results);
+                    libraryRoundTrips.put(library, stats.rtMean);
+                    bestRoundTrip = Math.min(bestRoundTrip, stats.rtMean);
+                }
+            }
+
+            // Build row
+            StringBuilder row = new StringBuilder("| " + objectType + " |");
+            for (String library : libraries) {
+                if (libraryRoundTrips.containsKey(library)) {
+                    double rtMean = libraryRoundTrips.get(library);
+                    String formatted = String.format("%.2f", rtMean);
+                    if (Math.abs(rtMean - bestRoundTrip) < 0.01) {
+                        row.append(" **").append(formatted).append("** |");
+                    } else {
+                        row.append(" ").append(formatted).append(" |");
+                    }
+                } else {
+                    row.append(" - |");
+                }
+            }
+            writer.println(row);
+        }
+
+        writer.println();
     }
 
     private String formatValue(double value, double bestValue) {
