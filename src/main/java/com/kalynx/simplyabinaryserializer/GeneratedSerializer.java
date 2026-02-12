@@ -868,27 +868,19 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
         w.writeByte(TYPE_OBJECT);
 
-        byte[] nested;
-        if (fi.nestedSerializer != null) {
-            nested = fi.nestedSerializer.serializeInternal(obj);
-        } else {
+        // Optimize: Write nested object directly to parent writer instead of creating intermediate byte[]
+        GeneratedSerializer<?> serializer = fi.nestedSerializer;
+        if (serializer == null) {
             // Handle case where serializer wasn't created (circular reference schema)
-            GeneratedSerializer<?> serializer = serializerCache.get(obj.getClass());
+            serializer = serializerCache.get(obj.getClass());
             if (serializer == null) {
                 serializer = new GeneratedSerializer<>(obj.getClass());
                 serializerCache.put(obj.getClass(), serializer);
             }
-            nested = serializer.serializeInternal(obj);
         }
 
-        // Use fixed single-byte length for small objects (< 255 bytes)
-        if (nested.length < 255) {
-            w.writeByte((byte) nested.length);
-        } else {
-            w.writeByte((byte) 255);
-            w.writeInt(nested.length);
-        }
-        w.writeBytes(nested, nested.length);
+        // Write nested object directly using the serializer's writer
+        serializer.generatedWriter.write(w, obj, serializer);
     }
 
     public Object readObjectField(FastByteReader r, int fieldIndex) throws Throwable {
@@ -903,21 +895,23 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             throw new IllegalStateException("Unknown object type: " + type);
         }
 
-        int len = r.readByte() & 0xFF;
-        if (len == 255) {
-            len = r.readInt();
-        }
-        byte[] nested = new byte[len];
-        r.readFully(nested, 0, len);
-
-        if (fi.nestedSerializer != null) {
-            return fi.nestedSerializer.deserializeInternal(nested);
-        } else {
+        // Optimize: Read nested object directly from parent reader instead of creating intermediate byte[]
+        GeneratedSerializer<?> serializer = fi.nestedSerializer;
+        if (serializer == null) {
             // Handle case where serializer wasn't created
             Class<?> fieldType = fi.field.getType();
-            GeneratedSerializer<?> serializer = serializerCache.get(fieldType);
+            serializer = serializerCache.get(fieldType);
             if (serializer == null) {
                 serializer = new GeneratedSerializer<>(fieldType);
+                serializerCache.put(fieldType, serializer);
+            }
+        }
+
+        // Create instance and read directly using MethodHandle
+        Object instance = serializer.constructorHandle.invoke();
+        serializer.generatedReader.read(r, instance, serializer);
+        return instance;
+    }
                 serializerCache.put(fieldType, serializer);
             }
             return serializer.deserializeInternal(nested);
