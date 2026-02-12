@@ -44,7 +44,7 @@ class FastByteWriter {
     }
 
     // Inline varint writing to avoid method call overhead
-    void writeVarint(int value) {
+    final void writeVarint(int value) {
         ensureCapacity(5); // Worst case: 5 bytes for int32
         if (value < 128) {
             buf[pos++] = (byte) value;
@@ -60,17 +60,17 @@ class FastByteWriter {
         }
     }
 
-    void writeShort(int v) {
+    final void writeShort(int v) {
         ensureCapacity(2);
         buf[pos++] = (byte) (v >>> 8);
         buf[pos++] = (byte) v;
     }
 
-    void writeShort(short v) {
+    final void writeShort(short v) {
         writeShort((int) v);
     }
 
-    void writeInt(int v) {
+    final void writeInt(int v) {
         ensureCapacity(4);
         buf[pos++] = (byte) (v >>> 24);
         buf[pos++] = (byte) (v >>> 16);
@@ -78,7 +78,7 @@ class FastByteWriter {
         buf[pos++] = (byte) v;
     }
 
-    void writeLong(long v) {
+    final void writeLong(long v) {
         ensureCapacity(8);
         buf[pos++] = (byte) (v >>> 56);
         buf[pos++] = (byte) (v >>> 48);
@@ -90,26 +90,26 @@ class FastByteWriter {
         buf[pos++] = (byte) v;
     }
 
-    void writeBoolean(boolean v) {
+    final void writeBoolean(boolean v) {
         ensureCapacity(1);
         buf[pos++] = (byte) (v ? 1 : 0);
     }
 
-    void writeDouble(double v) {
+    final void writeDouble(double v) {
         writeLong(Double.doubleToLongBits(v));
     }
 
-    void writeFloat(float v) {
+    final void writeFloat(float v) {
         writeInt(Float.floatToIntBits(v));
     }
 
-    void writeBytes(byte[] src, int len) {
+    final void writeBytes(byte[] src, int len) {
         ensureCapacity(len);
         System.arraycopy(src, 0, buf, pos, len);
         pos += len;
     }
 
-    void writeBytes(byte[] src) {
+    final void writeBytes(byte[] src) {
         ensureCapacity(src.length);
         System.arraycopy(src, 0, buf, pos, src.length);
         pos += src.length;
@@ -123,7 +123,7 @@ class FastByteWriter {
         }
     }
 
-    void writeString(byte[] strBytes) {
+    final void writeString(byte[] strBytes) {
         writeShort(strBytes.length);
         System.arraycopy(strBytes, 0, buf, pos, strBytes.length);
         pos += strBytes.length;

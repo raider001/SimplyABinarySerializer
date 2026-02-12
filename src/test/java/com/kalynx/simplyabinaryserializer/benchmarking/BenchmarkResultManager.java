@@ -85,11 +85,15 @@ public class BenchmarkResultManager {
                     .mapToInt(e -> benchmarkResults.get(e.getKey()).get(objectType).get(0).binarySize)
                     .min().orElse(Integer.MAX_VALUE);
 
+                // Sort libraries by overall performance (round-trip time, best to worst)
+                List<Map.Entry<String, LibraryStats>> sortedEntries = new ArrayList<>(statsMap.entrySet());
+                sortedEntries.sort(Comparator.comparingDouble(e -> e.getValue().rtMean));
+
                 // Generate table
                 writer.println("| Library | Serialize (ns/op) | Deserialize (ns/op) | Round-Trip (ns/op) | Binary Size (bytes) |");
                 writer.println("|---------|------------------:|--------------------:|-------------------:|--------------------:|");
 
-                for (Map.Entry<String, LibraryStats> entry : statsMap.entrySet()) {
+                for (Map.Entry<String, LibraryStats> entry : sortedEntries) {
                     String library = entry.getKey();
                     LibraryStats stats = entry.getValue();
                     int binarySize = benchmarkResults.get(library).get(objectType).get(0).binarySize;
@@ -114,7 +118,7 @@ public class BenchmarkResultManager {
                 double bestDesThroughput = statsMap.values().stream().mapToDouble(s -> 1_000_000_000.0 / s.desMean).max().orElse(0);
                 double bestRtThroughput = statsMap.values().stream().mapToDouble(s -> 1_000_000_000.0 / s.rtMean).max().orElse(0);
 
-                for (Map.Entry<String, LibraryStats> entry : statsMap.entrySet()) {
+                for (Map.Entry<String, LibraryStats> entry : sortedEntries) {
                     String library = entry.getKey();
                     LibraryStats stats = entry.getValue();
 
