@@ -9,6 +9,7 @@ import com.kalynx.simplyabinaryserializer.GeneratedSerializer;
 import com.kalynx.simplyabinaryserializer.TypedSerializer;
 import org.apache.fury.Fury;
 import org.apache.fury.config.Language;
+import org.apache.fury.config.FuryBuilder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +25,7 @@ import java.util.*;
  */
 public class ExtremeBenchmarkRunnerTests {
 
-    private static final int BENCHMARK_ITERATIONS = 1_000_000;
+    private static final int BENCHMARK_ITERATIONS = 10_000_000;
 
     // Library names
     private static final String TYPED_SERIALIZER = "TypedSerializer";
@@ -102,6 +103,7 @@ public class ExtremeBenchmarkRunnerTests {
             .withLanguage(Language.JAVA)
             .requireClassRegistration(false)
             .withRefTracking(true)
+            .withCodegen(false)  // DISABLE JIT code generation and Unsafe usage
             .build();
         fury.register(SimpleObject.class);
         fury.register(ComplexObject.class);
@@ -260,11 +262,12 @@ public class ExtremeBenchmarkRunnerTests {
         });
 
 
-        // Apache Fury setup with FFM enabled for maximum performance
+        // Apache Fury setup WITHOUT Unsafe for fair comparison
         fury = Fury.builder()
             .withLanguage(Language.JAVA)
             .requireClassRegistration(false)
             .withRefTracking(true)  // Enable reference tracking to handle nested objects correctly
+            .withCodegen(false)     // DISABLE JIT code generation and Unsafe usage for fair comparison
             .build();
         fury.register(SimpleObject.class);
         fury.register(ComplexObject.class);
