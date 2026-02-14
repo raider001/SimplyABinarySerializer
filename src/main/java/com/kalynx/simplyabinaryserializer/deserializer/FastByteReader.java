@@ -1,30 +1,30 @@
-package com.kalynx.simplyabinaryserializer;
+package com.kalynx.simplyabinaryserializer.deserializer;
 
 /**
  * Fast byte array reader that reads directly without stream overhead.
  * Avoids DataInputStream method call overhead for hot paths.
  */
-final class FastByteReader {
+public final class FastByteReader {
     private byte[] buf;
     private int pos;
 
-    final void setData(byte[] data) {
+    public final void setData(byte[] data) {
         this.buf = data;
         this.pos = 0;
     }
 
-    final byte readByte() {
+    public final byte readByte() {
         return buf[pos++];
     }
 
-    final int readInt() {
+    public final int readInt() {
         return ((buf[pos++] & 0xFF) << 24) |
                 ((buf[pos++] & 0xFF) << 16) |
                 ((buf[pos++] & 0xFF) << 8) |
                 (buf[pos++] & 0xFF);
     }
 
-    final long readLong() {
+    public final long readLong() {
         return ((long)(buf[pos++] & 0xFF) << 56) |
                 ((long)(buf[pos++] & 0xFF) << 48) |
                 ((long)(buf[pos++] & 0xFF) << 40) |
@@ -35,24 +35,24 @@ final class FastByteReader {
                 (buf[pos++] & 0xFF);
     }
 
-    final boolean readBoolean() {
+    public final boolean readBoolean() {
         return buf[pos++] != 0;
     }
 
-    final double readDouble() {
+    public final double readDouble() {
         return Double.longBitsToDouble(readLong());
     }
 
-    final float readFloat() {
+    public final float readFloat() {
         return Float.intBitsToFloat(readInt());
     }
 
-    final short readShort() {
+    public final short readShort() {
         return (short)(((buf[pos++] & 0xFF) << 8) | (buf[pos++] & 0xFF));
     }
 
     // Read varint (variable-length integer encoding)
-    final int readVarint() {
+    public final int readVarint() {
         int value = 0;
         int shift = 0;
         byte b;
@@ -66,12 +66,12 @@ final class FastByteReader {
         return value;
     }
 
-    final void readFully(byte[] dest, int off, int len) {
+    public final void readFully(byte[] dest, int off, int len) {
         System.arraycopy(buf, pos, dest, off, len);
         pos += len;
     }
 
-    final byte[] readBytes(int len) {
+    public final byte[] readBytes(int len) {
         byte[] result = new byte[len];
         System.arraycopy(buf, pos, result, 0, len);
         pos += len;
@@ -79,7 +79,7 @@ final class FastByteReader {
     }
 
     // Optimized method to read multiple integers at once - reduces method call overhead
-    final void readInts(int[] dest, int count) {
+    public final void readInts(int[] dest, int count) {
         for (int i = 0; i < count; i++) {
             dest[i] = ((buf[pos++] & 0xFF) << 24) |
                       ((buf[pos++] & 0xFF) << 16) |
@@ -88,11 +88,11 @@ final class FastByteReader {
         }
     }
 
-    final int getPosition() {
+    public final int getPosition() {
         return pos;
     }
 
-    final byte[] getBuffer() {
+    public final byte[] getBuffer() {
         return buf;
     }
 }

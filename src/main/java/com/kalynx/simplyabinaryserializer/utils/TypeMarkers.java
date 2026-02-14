@@ -1,4 +1,4 @@
-package com.kalynx.simplyabinaryserializer;
+package com.kalynx.simplyabinaryserializer.utils;
 
 public class TypeMarkers {
     // Type markers

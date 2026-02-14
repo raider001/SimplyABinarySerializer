@@ -1,5 +1,8 @@
 package com.kalynx.simplyabinaryserializer;
 
+import com.kalynx.simplyabinaryserializer.deserializer.FastByteReader;
+import com.kalynx.simplyabinaryserializer.serializer.FastByteWriter;
+
 import java.lang.classfile.*;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -17,7 +20,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
+import static com.kalynx.simplyabinaryserializer.utils.TypeMarkers.*;
 
 /**
  * Ultra-fast serializer using runtime bytecode generation via Java ClassFile API.
@@ -34,7 +37,7 @@ public class OptimizedSerializer<T> implements OldSerializer, Deserializer {
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
     private static final ClassDesc CD_FastByteWriter = ClassDesc.of("com.kalynx.simplyabinaryserializer.FastByteWriter");
-    private static final ClassDesc CD_FastByteReader = ClassDesc.of("com.kalynx.simplyabinaryserializer.FastByteReader");
+    private static final ClassDesc CD_FastByteReader = ClassDesc.of("com.kalynx.simplyabinaryserializer.deserializer.FastByteReader");
     private static final ClassDesc CD_Object = ConstantDescs.CD_Object;
     private static final ClassDesc CD_String = ConstantDescs.CD_String;
     private static final ClassDesc CD_List = ClassDesc.of("java.util.List");
@@ -206,7 +209,6 @@ public class OptimizedSerializer<T> implements OldSerializer, Deserializer {
         }
     }
 
-    @Override
     public <U> U deserialize(byte[] data, Class<U> type) throws Throwable {
         return type.cast(deserialize(data));
     }
@@ -677,7 +679,7 @@ public class OptimizedSerializer<T> implements OldSerializer, Deserializer {
                     cb.aload(4); // typed obj
                     cb.iload(5); // int value
                     cb.invokestatic(ClassDesc.of("java.lang.Integer"), "valueOf",
-                        MethodTypeDesc.of(ClassDesc.of("java.lang.Integer"), ConstantDescs.CD_int));
+                            MethodTypeDesc.of(ClassDesc.of("java.lang.Integer"), ConstantDescs.CD_int));
                     cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
 
                     cb.labelBinding(end);
@@ -1568,7 +1570,6 @@ public class OptimizedSerializer<T> implements OldSerializer, Deserializer {
 
     private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, BYTE, STRING, LIST, MAP, OBJECT, ENUM, ARRAY }
 }
-
 
 
 

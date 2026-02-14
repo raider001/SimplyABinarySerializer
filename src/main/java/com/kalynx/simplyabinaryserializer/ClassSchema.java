@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
+import static com.kalynx.simplyabinaryserializer.utils.TypeMarkers.*;
 
 
 

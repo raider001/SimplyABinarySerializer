@@ -1,50 +1,50 @@
-package com.kalynx.simplyabinaryserializer;
+package com.kalynx.simplyabinaryserializer.serializer;
 
 /**
  * Fast byte array writer that writes directly without stream overhead.
  * Avoids DataOutputStream method call overhead for hot paths.
  */
-class FastByteWriter {
+public class FastByteWriter {
     private byte[] buf;
     private int pos;
 
-    void setBuffer(byte[] buffer) {
+    public void setBuffer(byte[] buffer) {
         this.buf = buffer;
         this.pos = 0;
     }
 
-    void reset(int capacity) {
+    public void reset(int capacity) {
         if (buf == null || buf.length < capacity) {
             buf = new byte[capacity];
         }
         pos = 0;
     }
 
-    byte[] toByteArray() {
+    public byte[] toByteArray() {
         byte[] result = new byte[pos];
         System.arraycopy(buf, 0, result, 0, pos);
         return result;
     }
 
-    void setPosition(int position) {
+    public void setPosition(int position) {
         this.pos = position;
     }
 
-    int getPosition() {
+    public int getPosition() {
         return pos;
     }
 
-    byte[] getBuffer() {
+    public byte[] getBuffer() {
         return buf;
     }
 
-    void writeByte(int v) {
+    public void writeByte(int v) {
         ensureCapacity(1);
         buf[pos++] = (byte) v;
     }
 
     // Inline varint writing to avoid method call overhead
-    final void writeVarint(int value) {
+    public final void writeVarint(int value) {
         ensureCapacity(5); // Worst case: 5 bytes for int32
         if (value < 128) {
             buf[pos++] = (byte) value;
@@ -60,17 +60,17 @@ class FastByteWriter {
         }
     }
 
-    final void writeShort(int v) {
+    public final void writeShort(int v) {
         ensureCapacity(2);
         buf[pos++] = (byte) (v >>> 8);
         buf[pos++] = (byte) v;
     }
 
-    final void writeShort(short v) {
+    public final void writeShort(short v) {
         writeShort((int) v);
     }
 
-    final void writeInt(int v) {
+    public final void writeInt(int v) {
         ensureCapacity(4);
         buf[pos++] = (byte) (v >>> 24);
         buf[pos++] = (byte) (v >>> 16);
@@ -78,7 +78,7 @@ class FastByteWriter {
         buf[pos++] = (byte) v;
     }
 
-    final void writeLong(long v) {
+    public final void writeLong(long v) {
         ensureCapacity(8);
         buf[pos++] = (byte) (v >>> 56);
         buf[pos++] = (byte) (v >>> 48);
@@ -90,26 +90,26 @@ class FastByteWriter {
         buf[pos++] = (byte) v;
     }
 
-    final void writeBoolean(boolean v) {
+    public final void writeBoolean(boolean v) {
         ensureCapacity(1);
         buf[pos++] = (byte) (v ? 1 : 0);
     }
 
-    final void writeDouble(double v) {
+    public final void writeDouble(double v) {
         writeLong(Double.doubleToLongBits(v));
     }
 
-    final void writeFloat(float v) {
+    public final void writeFloat(float v) {
         writeInt(Float.floatToIntBits(v));
     }
 
-    final void writeBytes(byte[] src, int len) {
+    public final void writeBytes(byte[] src, int len) {
         ensureCapacity(len);
         System.arraycopy(src, 0, buf, pos, len);
         pos += len;
     }
 
-    final void writeBytes(byte[] src) {
+    public final void writeBytes(byte[] src) {
         ensureCapacity(src.length);
         System.arraycopy(src, 0, buf, pos, src.length);
         pos += src.length;
@@ -123,9 +123,10 @@ class FastByteWriter {
         }
     }
 
-    final void writeString(byte[] strBytes) {
+    public final void writeString(byte[] strBytes) {
         writeShort(strBytes.length);
         System.arraycopy(strBytes, 0, buf, pos, strBytes.length);
         pos += strBytes.length;
     }
 }
+
