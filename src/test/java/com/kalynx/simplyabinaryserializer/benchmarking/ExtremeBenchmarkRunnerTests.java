@@ -5,11 +5,9 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
-import com.kalynx.simplyabinaryserializer.GeneratedSerializer;
-import com.kalynx.simplyabinaryserializer.TypedSerializer;
+import com.kalynx.simplyabinaryserializer.OptimizedSerializer;
 import org.apache.fury.Fury;
 import org.apache.fury.config.Language;
-import org.apache.fury.config.FuryBuilder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,8 +26,7 @@ public class ExtremeBenchmarkRunnerTests {
     private static final int BENCHMARK_ITERATIONS = 10_000_000;
 
     // Library names
-    private static final String TYPED_SERIALIZER = "TypedSerializer";
-    private static final String GENERATED_SERIALIZER = "GeneratedSerializer";
+    private static final String OPTIMIZED_SERIALIZER = "OptimizedSerializer";
     private static final String KRYO = "Kryo";
     private static final String JACKSON = "Jackson";
     private static final String GSON = "Gson";
@@ -45,22 +42,24 @@ public class ExtremeBenchmarkRunnerTests {
     private static final String ENUM_OBJECT = "EnumObject";
     private static final String COMPLEX_MAP = "ComplexMapObject";
     private static final String MIXED_COMPLEXITY = "MixedComplexityObject";
+    private static final String INT_ARRAY = "IntArrayObject";
+    private static final String BOOLEAN_ARRAY = "BooleanArrayObject";
+    private static final String DOUBLE_ARRAY = "DoubleArrayObject";
+    private static final String STRING_ARRAY = "StringArrayObject";
 
-    private static final String[] LIBRARIES = {TYPED_SERIALIZER, GENERATED_SERIALIZER, KRYO, FURY};
+    private static final String[] LIBRARIES = {OPTIMIZED_SERIALIZER, KRYO, FURY};
     private static final String[] OBJECT_TYPES = {
         SIMPLE_OBJECT, COMPLEX_OBJECT, DEEP_OBJECT,
         LIST_VARIETY, COMPLEX_LIST, NULLABLE,
-        ENUM_OBJECT, COMPLEX_MAP, MIXED_COMPLEXITY
+        ENUM_OBJECT, COMPLEX_MAP, MIXED_COMPLEXITY,
+        INT_ARRAY, BOOLEAN_ARRAY, DOUBLE_ARRAY, STRING_ARRAY
     };
 
     private static BenchmarkResultManager resultManager;
 
-    private TypedSerializer<SimpleObject> typedSimpleSerializer;
-    private TypedSerializer<ComplexObject> typedComplexSerializer;
-    private TypedSerializer<DeepObject> typedDeepSerializer;
-    private GeneratedSerializer<SimpleObject> genSimpleSerializer;
-    private GeneratedSerializer<ComplexObject> genComplexSerializer;
-    private GeneratedSerializer<DeepObject> genDeepSerializer;
+    private OptimizedSerializer<SimpleObject> genSimpleSerializer;
+    private OptimizedSerializer<ComplexObject> genComplexSerializer;
+    private OptimizedSerializer<DeepObject> genDeepSerializer;
     private ObjectMapper jacksonMapper;
     private Gson gson;
     private ThreadLocal<Kryo> kryoThreadLocal;
@@ -88,12 +87,9 @@ public class ExtremeBenchmarkRunnerTests {
 
     private static void performComprehensiveWarmup() throws Throwable {
         // Create temporary serializers for warmup
-        TypedSerializer<SimpleObject> typedSimple = new TypedSerializer<>(SimpleObject.class);
-        TypedSerializer<ComplexObject> typedComplex = new TypedSerializer<>(ComplexObject.class);
-        TypedSerializer<DeepObject> typedDeep = new TypedSerializer<>(DeepObject.class);
-        GeneratedSerializer<SimpleObject> genSimple = new GeneratedSerializer<>(SimpleObject.class);
-        GeneratedSerializer<ComplexObject> genComplex = new GeneratedSerializer<>(ComplexObject.class);
-        GeneratedSerializer<DeepObject> genDeep = new GeneratedSerializer<>(DeepObject.class);
+        OptimizedSerializer<SimpleObject> genSimple = new OptimizedSerializer<>(SimpleObject.class);
+        OptimizedSerializer<ComplexObject> genComplex = new OptimizedSerializer<>(ComplexObject.class);
+        OptimizedSerializer<DeepObject> genDeep = new OptimizedSerializer<>(DeepObject.class);
 
         ObjectMapper jackson = new ObjectMapper();
         Gson gson = new Gson();
@@ -142,11 +138,8 @@ public class ExtremeBenchmarkRunnerTests {
         for (int i = 0; i < 10_000; i++) {
             SimpleObject obj = createSimpleObject(i);
 
-            // Warm up all serializers
-            byte[] data = typedSimple.serialize(obj);
-            typedSimple.deserialize(data);
-
-            data = genSimple.serialize(obj);
+            // Warm up serializers
+            byte[] data = genSimple.serialize(obj);
             genSimple.deserialize(data);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -171,10 +164,7 @@ public class ExtremeBenchmarkRunnerTests {
         for (int i = 0; i < 5_000; i++) {
             ComplexObject obj = createComplexObject(i);
 
-            byte[] data = typedComplex.serialize(obj);
-            typedComplex.deserialize(data);
-
-            data = genComplex.serialize(obj);
+            byte[] data = genComplex.serialize(obj);
             genComplex.deserialize(data);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -199,10 +189,7 @@ public class ExtremeBenchmarkRunnerTests {
         for (int i = 0; i < 2_000; i++) {
             DeepObject obj = createDeepObject(i, 5);
 
-            byte[] data = typedDeep.serialize(obj);
-            typedDeep.deserialize(data);
-
-            data = genDeep.serialize(obj);
+            byte[] data = genDeep.serialize(obj);
             genDeep.deserialize(data);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -422,14 +409,51 @@ public class ExtremeBenchmarkRunnerTests {
         return obj;
     }
 
+    private static IntArrayObject createIntArrayObject(int seed) {
+        IntArrayObject obj = new IntArrayObject();
+        obj.id = seed;
+        obj.values = new int[10];
+        for (int i = 0; i < 10; i++) {
+            obj.values[i] = seed * 100 + i;
+        }
+        return obj;
+    }
+
+    private static BooleanArrayObject createBooleanArrayObject(int seed) {
+        BooleanArrayObject obj = new BooleanArrayObject();
+        obj.id = seed;
+        obj.flags = new boolean[10];
+        for (int i = 0; i < 10; i++) {
+            obj.flags[i] = (seed + i) % 2 == 0;
+        }
+        return obj;
+    }
+
+    private static DoubleArrayObject createDoubleArrayObject(int seed) {
+        DoubleArrayObject obj = new DoubleArrayObject();
+        obj.id = seed;
+        obj.measurements = new double[10];
+        for (int i = 0; i < 10; i++) {
+            obj.measurements[i] = seed * 1.5 + i * 0.1;
+        }
+        return obj;
+    }
+
+    private static StringArrayObject createStringArrayObject(int seed) {
+        StringArrayObject obj = new StringArrayObject();
+        obj.id = seed;
+        obj.names = new String[10];
+        for (int i = 0; i < 10; i++) {
+            obj.names[i] = "Name" + seed + "_" + i;
+        }
+        return obj;
+    }
+
     @BeforeEach
     public void setup() {
-        typedSimpleSerializer = new TypedSerializer<>(SimpleObject.class);
-        typedComplexSerializer = new TypedSerializer<>(ComplexObject.class);
-        typedDeepSerializer = new TypedSerializer<>(DeepObject.class);
-        genSimpleSerializer = new GeneratedSerializer<>(SimpleObject.class);
-        genComplexSerializer = new GeneratedSerializer<>(ComplexObject.class);
-        genDeepSerializer = new GeneratedSerializer<>(DeepObject.class);
+        genSimpleSerializer = new OptimizedSerializer<>(SimpleObject.class);
+        genComplexSerializer = new OptimizedSerializer<>(ComplexObject.class);
+        genDeepSerializer = new OptimizedSerializer<>(DeepObject.class);
         jacksonMapper = new ObjectMapper();
         gson = new Gson();
 
@@ -479,25 +503,8 @@ public class ExtremeBenchmarkRunnerTests {
     // REUSABLE SERIALIZATION/DESERIALIZATION METHODS
     // ========================================================================
 
-    private <T> BenchmarkResultManager.SerializationResult benchmarkTypedSerializer(TypedSerializer<T> serializer, T[] objects, int iterations) throws Throwable {
-        byte[][] data = new byte[iterations][];
 
-        long serStart = System.nanoTime();
-        for (int i = 0; i < iterations; i++) {
-            data[i] = serializer.serialize(objects[i]);
-        }
-        long serTime = System.nanoTime() - serStart;
-
-        long desStart = System.nanoTime();
-        for (int i = 0; i < iterations; i++) {
-            serializer.deserialize(data[i]);
-        }
-        long desTime = System.nanoTime() - desStart;
-
-        return new BenchmarkResultManager.SerializationResult(serTime, desTime, data[0].length, iterations);
-    }
-
-    private <T> BenchmarkResultManager.SerializationResult benchmarkGeneratedSerializer(GeneratedSerializer<T> serializer, T[] objects, int iterations) throws Throwable {
+    private <T> BenchmarkResultManager.SerializationResult benchmarkOptimizedSerializer(OptimizedSerializer<T> serializer, T[] objects, int iterations) throws Throwable {
         byte[][] data = new byte[iterations][];
 
         long serStart = System.nanoTime();
@@ -597,25 +604,26 @@ public class ExtremeBenchmarkRunnerTests {
     // INDIVIDUAL TEST METHODS (ONE PER LIBRARY PER OBJECT TYPE)
     // ========================================================================
 
-    // ---- TypedSerializer Tests ----
+
+    // ---- OptimizedSerializer Tests ----
 
     @Test
-    public void benchmarkTypedSerializer_SimpleObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - SimpleObject ===");
+    public void benchmarkOptimizedSerializer_SimpleObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - SimpleObject ===");
 
         SimpleObject[] objects = new SimpleObject[BENCHMARK_ITERATIONS];
         for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
             objects[i] = createSimpleObject(i);
         }
 
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(typedSimpleSerializer, objects, BENCHMARK_ITERATIONS);
-        resultManager.recordResult(TYPED_SERIALIZER, SIMPLE_OBJECT, result);
-        resultManager.printResult("TypedSerializer", "SimpleObject", result);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(genSimpleSerializer, objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, SIMPLE_OBJECT, result);
+        resultManager.printResult("OptimizedSerializer", "SimpleObject", result);
     }
 
     @Test
-    public void benchmarkTypedSerializer_ComplexObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - ComplexObject ===");
+    public void benchmarkOptimizedSerializer_ComplexObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - ComplexObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 5;
         ComplexObject[] objects = new ComplexObject[iterations];
@@ -623,14 +631,14 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createComplexObject(i);
         }
 
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(typedComplexSerializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, COMPLEX_OBJECT, result);
-        resultManager.printResult("TypedSerializer", "ComplexObject", result);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(genComplexSerializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, COMPLEX_OBJECT, result);
+        resultManager.printResult("OptimizedSerializer", "ComplexObject", result);
     }
 
     @Test
-    public void benchmarkTypedSerializer_DeepObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - DeepObject (5 levels) ===");
+    public void benchmarkOptimizedSerializer_DeepObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - DeepObject (5 levels) ===");
 
         int iterations = BENCHMARK_ITERATIONS / 10;
         DeepObject[] objects = new DeepObject[iterations];
@@ -638,55 +646,9 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createDeepObject(i, 5);
         }
 
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(typedDeepSerializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, DEEP_OBJECT, result);
-        resultManager.printResult("TypedSerializer", "DeepObject", result);
-    }
-
-    // ---- GeneratedSerializer Tests ----
-
-    @Test
-    public void benchmarkGeneratedSerializer_SimpleObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - SimpleObject ===");
-
-        SimpleObject[] objects = new SimpleObject[BENCHMARK_ITERATIONS];
-        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
-            objects[i] = createSimpleObject(i);
-        }
-
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(genSimpleSerializer, objects, BENCHMARK_ITERATIONS);
-        resultManager.recordResult(GENERATED_SERIALIZER, SIMPLE_OBJECT, result);
-        resultManager.printResult("GeneratedSerializer", "SimpleObject", result);
-    }
-
-    @Test
-    public void benchmarkGeneratedSerializer_ComplexObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - ComplexObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 5;
-        ComplexObject[] objects = new ComplexObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createComplexObject(i);
-        }
-
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(genComplexSerializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, COMPLEX_OBJECT, result);
-        resultManager.printResult("GeneratedSerializer", "ComplexObject", result);
-    }
-
-    @Test
-    public void benchmarkGeneratedSerializer_DeepObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - DeepObject (5 levels) ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 10;
-        DeepObject[] objects = new DeepObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createDeepObject(i, 5);
-        }
-
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(genDeepSerializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, DEEP_OBJECT, result);
-        resultManager.printResult("GeneratedSerializer", "DeepObject", result);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(genDeepSerializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, DEEP_OBJECT, result);
+        resultManager.printResult("OptimizedSerializer", "DeepObject", result);
     }
 
     // ---- Kryo Tests ----
@@ -874,12 +836,12 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     // ========================================================================
-    // NEW COMPREHENSIVE SCENARIO TESTS (GeneratedSerializer only for speed)
+    // NEW COMPREHENSIVE SCENARIO TESTS (OptimizedSerializer only for speed)
     // ========================================================================
 
     @Test
-    public void benchmarkGeneratedSerializer_ListVarietyObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - ListVarietyObject ===");
+    public void benchmarkOptimizedSerializer_ListVarietyObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - ListVarietyObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 5;
         ListVarietyObject[] objects = new ListVarietyObject[iterations];
@@ -887,27 +849,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createListVarietyObject(i);
         }
 
-        GeneratedSerializer<ListVarietyObject> serializer = new GeneratedSerializer<>(ListVarietyObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, LIST_VARIETY, result);
-        resultManager.printResult("GeneratedSerializer", "ListVarietyObject", result);
+        OptimizedSerializer<ListVarietyObject> serializer = new OptimizedSerializer<>(ListVarietyObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, LIST_VARIETY, result);
+        resultManager.printResult("OptimizedSerializer", "ListVarietyObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_ListVarietyObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - ListVarietyObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 5;
-        ListVarietyObject[] objects = new ListVarietyObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createListVarietyObject(i);
-        }
-
-        TypedSerializer<ListVarietyObject> serializer = new TypedSerializer<>(ListVarietyObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, LIST_VARIETY, result);
-        resultManager.printResult("TypedSerializer", "ListVarietyObject", result);
-    }
 
     @Test
     public void benchmarkKryo_ListVarietyObject() throws Throwable {
@@ -970,8 +917,8 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     @Test
-    public void benchmarkGeneratedSerializer_ComplexListObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - ComplexListObject ===");
+    public void benchmarkOptimizedSerializer_ComplexListObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - ComplexListObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 10;
         ComplexListObject[] objects = new ComplexListObject[iterations];
@@ -979,27 +926,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createComplexListObject(i);
         }
 
-        GeneratedSerializer<ComplexListObject> serializer = new GeneratedSerializer<>(ComplexListObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, COMPLEX_LIST, result);
-        resultManager.printResult("GeneratedSerializer", "ComplexListObject", result);
+        OptimizedSerializer<ComplexListObject> serializer = new OptimizedSerializer<>(ComplexListObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, COMPLEX_LIST, result);
+        resultManager.printResult("OptimizedSerializer", "ComplexListObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_ComplexListObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - ComplexListObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 10;
-        ComplexListObject[] objects = new ComplexListObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createComplexListObject(i);
-        }
-
-        TypedSerializer<ComplexListObject> serializer = new TypedSerializer<>(ComplexListObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, COMPLEX_LIST, result);
-        resultManager.printResult("TypedSerializer", "ComplexListObject", result);
-    }
 
     @Test
     public void benchmarkKryo_ComplexListObject() throws Throwable {
@@ -1062,8 +994,8 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     @Test
-    public void benchmarkGeneratedSerializer_NullableObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - NullableObject ===");
+    public void benchmarkOptimizedSerializer_NullableObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - NullableObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 5;
         NullableObject[] objects = new NullableObject[iterations];
@@ -1071,27 +1003,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createNullableObject(i);
         }
 
-        GeneratedSerializer<NullableObject> serializer = new GeneratedSerializer<>(NullableObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, NULLABLE, result);
-        resultManager.printResult("GeneratedSerializer", "NullableObject", result);
+        OptimizedSerializer<NullableObject> serializer = new OptimizedSerializer<>(NullableObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, NULLABLE, result);
+        resultManager.printResult("OptimizedSerializer", "NullableObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_NullableObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - NullableObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 5;
-        NullableObject[] objects = new NullableObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createNullableObject(i);
-        }
-
-        TypedSerializer<NullableObject> serializer = new TypedSerializer<>(NullableObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, NULLABLE, result);
-        resultManager.printResult("TypedSerializer", "NullableObject", result);
-    }
 
     @Test
     public void benchmarkKryo_NullableObject() throws Throwable {
@@ -1124,8 +1041,8 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     @Test
-    public void benchmarkGeneratedSerializer_EnumObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - EnumObject ===");
+    public void benchmarkOptimizedSerializer_EnumObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - EnumObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 5;
         EnumObject[] objects = new EnumObject[iterations];
@@ -1133,27 +1050,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createEnumObject(i);
         }
 
-        GeneratedSerializer<EnumObject> serializer = new GeneratedSerializer<>(EnumObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, ENUM_OBJECT, result);
-        resultManager.printResult("GeneratedSerializer", "EnumObject", result);
+        OptimizedSerializer<EnumObject> serializer = new OptimizedSerializer<>(EnumObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, ENUM_OBJECT, result);
+        resultManager.printResult("OptimizedSerializer", "EnumObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_EnumObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - EnumObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 5;
-        EnumObject[] objects = new EnumObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createEnumObject(i);
-        }
-
-        TypedSerializer<EnumObject> serializer = new TypedSerializer<>(EnumObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, ENUM_OBJECT, result);
-        resultManager.printResult("TypedSerializer", "EnumObject", result);
-    }
 
     @Test
     public void benchmarkKryo_EnumObject() throws Throwable {
@@ -1186,8 +1088,8 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     @Test
-    public void benchmarkGeneratedSerializer_ComplexMapObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - ComplexMapObject ===");
+    public void benchmarkOptimizedSerializer_ComplexMapObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - ComplexMapObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 10;
         ComplexMapObject[] objects = new ComplexMapObject[iterations];
@@ -1195,27 +1097,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createComplexMapObject(i);
         }
 
-        GeneratedSerializer<ComplexMapObject> serializer = new GeneratedSerializer<>(ComplexMapObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, COMPLEX_MAP, result);
-        resultManager.printResult("GeneratedSerializer", "ComplexMapObject", result);
+        OptimizedSerializer<ComplexMapObject> serializer = new OptimizedSerializer<>(ComplexMapObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, COMPLEX_MAP, result);
+        resultManager.printResult("OptimizedSerializer", "ComplexMapObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_ComplexMapObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - ComplexMapObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 10;
-        ComplexMapObject[] objects = new ComplexMapObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createComplexMapObject(i);
-        }
-
-        TypedSerializer<ComplexMapObject> serializer = new TypedSerializer<>(ComplexMapObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, COMPLEX_MAP, result);
-        resultManager.printResult("TypedSerializer", "ComplexMapObject", result);
-    }
 
     @Test
     public void benchmarkKryo_ComplexMapObject() throws Throwable {
@@ -1278,8 +1165,8 @@ public class ExtremeBenchmarkRunnerTests {
     }
 
     @Test
-    public void benchmarkGeneratedSerializer_MixedComplexityObject() throws Throwable {
-        System.out.println("\n=== GeneratedSerializer - MixedComplexityObject ===");
+    public void benchmarkOptimizedSerializer_MixedComplexityObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - MixedComplexityObject ===");
 
         int iterations = BENCHMARK_ITERATIONS / 10;
         MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
@@ -1287,27 +1174,12 @@ public class ExtremeBenchmarkRunnerTests {
             objects[i] = createMixedComplexityObject(i);
         }
 
-        GeneratedSerializer<MixedComplexityObject> serializer = new GeneratedSerializer<>(MixedComplexityObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkGeneratedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(GENERATED_SERIALIZER, MIXED_COMPLEXITY, result);
-        resultManager.printResult("GeneratedSerializer", "MixedComplexityObject", result);
+        OptimizedSerializer<MixedComplexityObject> serializer = new OptimizedSerializer<>(MixedComplexityObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, MIXED_COMPLEXITY, result);
+        resultManager.printResult("OptimizedSerializer", "MixedComplexityObject", result);
     }
 
-    @Test
-    public void benchmarkTypedSerializer_MixedComplexityObject() throws Throwable {
-        System.out.println("\n=== TypedSerializer - MixedComplexityObject ===");
-
-        int iterations = BENCHMARK_ITERATIONS / 10;
-        MixedComplexityObject[] objects = new MixedComplexityObject[iterations];
-        for (int i = 0; i < iterations; i++) {
-            objects[i] = createMixedComplexityObject(i);
-        }
-
-        TypedSerializer<MixedComplexityObject> serializer = new TypedSerializer<>(MixedComplexityObject.class);
-        BenchmarkResultManager.SerializationResult result = benchmarkTypedSerializer(serializer, objects, iterations);
-        resultManager.recordResult(TYPED_SERIALIZER, MIXED_COMPLEXITY, result);
-        resultManager.printResult("TypedSerializer", "MixedComplexityObject", result);
-    }
 
     @Test
     public void benchmarkKryo_MixedComplexityObject() throws Throwable {
@@ -1337,6 +1209,72 @@ public class ExtremeBenchmarkRunnerTests {
         BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, iterations);
         resultManager.recordResult(FURY, MIXED_COMPLEXITY, result);
         resultManager.printResult("Apache Fury", "MixedComplexityObject", result);
+    }
+
+    // ---- Array Tests ----
+
+    @Test
+    public void benchmarkOptimizedSerializer_IntArrayObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - IntArrayObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        IntArrayObject[] objects = new IntArrayObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createIntArrayObject(i);
+        }
+
+        OptimizedSerializer<IntArrayObject> serializer = new OptimizedSerializer<>(IntArrayObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, INT_ARRAY, result);
+        resultManager.printResult("OptimizedSerializer", "IntArrayObject", result);
+    }
+
+    @Test
+    public void benchmarkOptimizedSerializer_BooleanArrayObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - BooleanArrayObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        BooleanArrayObject[] objects = new BooleanArrayObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createBooleanArrayObject(i);
+        }
+
+        OptimizedSerializer<BooleanArrayObject> serializer = new OptimizedSerializer<>(BooleanArrayObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, BOOLEAN_ARRAY, result);
+        resultManager.printResult("OptimizedSerializer", "BooleanArrayObject", result);
+    }
+
+    @Test
+    public void benchmarkOptimizedSerializer_DoubleArrayObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - DoubleArrayObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        DoubleArrayObject[] objects = new DoubleArrayObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createDoubleArrayObject(i);
+        }
+
+        OptimizedSerializer<DoubleArrayObject> serializer = new OptimizedSerializer<>(DoubleArrayObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, DOUBLE_ARRAY, result);
+        resultManager.printResult("OptimizedSerializer", "DoubleArrayObject", result);
+    }
+
+    @Test
+    public void benchmarkOptimizedSerializer_StringArrayObject() throws Throwable {
+        System.out.println("\n=== OptimizedSerializer - StringArrayObject ===");
+
+        int iterations = BENCHMARK_ITERATIONS / 5;
+        StringArrayObject[] objects = new StringArrayObject[iterations];
+        for (int i = 0; i < iterations; i++) {
+            objects[i] = createStringArrayObject(i);
+        }
+
+        OptimizedSerializer<StringArrayObject> serializer = new OptimizedSerializer<>(StringArrayObject.class);
+        BenchmarkResultManager.SerializationResult result = benchmarkOptimizedSerializer(serializer, objects, iterations);
+        resultManager.recordResult(OPTIMIZED_SERIALIZER, STRING_ARRAY, result);
+        resultManager.printResult("OptimizedSerializer", "StringArrayObject", result);
     }
 
     // ========================================================================
@@ -1455,6 +1393,34 @@ public class ExtremeBenchmarkRunnerTests {
         public NestedObject singleNested;
         public String nullableField;
         public MixedComplexityObject() {}
+    }
+
+    // Scenario: Array of integers
+    public static class IntArrayObject {
+        public int id;
+        public int[] values;
+        public IntArrayObject() {}
+    }
+
+    // Scenario: Array of booleans
+    public static class BooleanArrayObject {
+        public int id;
+        public boolean[] flags;
+        public BooleanArrayObject() {}
+    }
+
+    // Scenario: Array of doubles
+    public static class DoubleArrayObject {
+        public int id;
+        public double[] measurements;
+        public DoubleArrayObject() {}
+    }
+
+    // Scenario: Array of strings
+    public static class StringArrayObject {
+        public int id;
+        public String[] names;
+        public StringArrayObject() {}
     }
 }
 

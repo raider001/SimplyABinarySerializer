@@ -2,22 +2,22 @@ package com.kalynx.simplyabinaryserializer;
 
 public class TypeMarkers {
     // Type markers
-    static final byte TYPE_STRING = 1;
-    static final byte TYPE_INT = 2;
-    static final byte TYPE_LONG = 3;
-    static final byte TYPE_BOOLEAN = 4;
-    static final byte TYPE_DOUBLE = 5;
-    static final byte TYPE_MAP = 6;
-    static final byte TYPE_OBJECT = 7;
-    static final byte TYPE_LIST = 8;
-    static final byte TYPE_SET = 9;
-    static final byte TYPE_ARRAY = 10;
-    static final byte TYPE_NULL = 11;
-    static final byte TYPE_FLOAT = 15;
-    static final byte TYPE_SHORT = 16;
+    public static final byte TYPE_STRING = 1;
+    public static final byte TYPE_INT = 2;
+    public static final byte TYPE_LONG = 3;
+    public static final byte TYPE_BOOLEAN = 4;
+    public static final byte TYPE_DOUBLE = 5;
+    public static final byte TYPE_MAP = 6;
+    public static final byte TYPE_OBJECT = 7;
+    public static final byte TYPE_LIST = 8;
+    public static final byte TYPE_SET = 9;
+    public static final byte TYPE_ARRAY = 10;
+    public static final byte TYPE_NULL = 11;
+    public static final byte TYPE_FLOAT = 15;
+    public static final byte TYPE_SHORT = 16;
 
     // Optimized type markers
-    static final byte TYPE_OBJECT_PACKED = 12; // Object with packed field descriptors
+    public static final byte TYPE_OBJECT_PACKED = 12; // Object with packed field descriptors
     static final byte TYPE_LIST_STRING = 13;   // Homogeneous list of strings
     static final byte TYPE_SCHEMALESS = 14;    // Schema-based (no type markers, class as template)
 

@@ -30,7 +30,7 @@ import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
  *
  * @param <T> The type this serializer handles
  */
-public class GeneratedSerializer<T> implements Serializer, Deserializer {
+public class OptimizedSerializer<T> implements Serializer, Deserializer {
 
     private static final AtomicLong CLASS_COUNTER = new AtomicLong(0);
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
@@ -43,7 +43,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     private static final ClassDesc CD_Map = ClassDesc.of("java.util.Map");
     private static final ClassDesc CD_ArrayList = ClassDesc.of("java.util.ArrayList");
     private static final ClassDesc CD_HashMap = ClassDesc.of("java.util.HashMap");
-    private static final ClassDesc CD_GeneratedSerializer = ClassDesc.of("com.kalynx.simplyabinaryserializer.GeneratedSerializer");
+    private static final ClassDesc CD_OptimizedSerializer = ClassDesc.of("com.kalynx.simplyabinaryserializer.OptimizedSerializer");
 
     private final Class<T> targetClass;
     private final FieldInfo[] fieldInfos;
@@ -53,13 +53,8 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     private final boolean hasNestedObjects;
 
     // Cache to prevent infinite recursion
-    private static final Map<Class<?>, GeneratedSerializer<?>> serializerCache = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, OptimizedSerializer<?>> serializerCache = new ConcurrentHashMap<>();
     private static final Set<Class<?>> processingClasses = ConcurrentHashMap.newKeySet();
-
-    // Type markers for serialization
-    private static final byte TYPE_NULL = 0;
-    private static final byte TYPE_OBJECT = 1;
-    private static final byte TYPE_OBJECT_PACKED = 3; // For top-level objects
 
     // Generated serializer/deserializer instances
     private final GeneratedWriter<T> generatedWriter;
@@ -97,16 +92,16 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
     @FunctionalInterface
     public interface GeneratedWriter<T> {
-        void write(FastByteWriter w, T obj, GeneratedSerializer<T> ser) throws Throwable;
+        void write(FastByteWriter w, T obj, OptimizedSerializer<T> ser) throws Throwable;
     }
 
     @FunctionalInterface
     public interface GeneratedReader<T> {
-        void read(FastByteReader r, T obj, GeneratedSerializer<T> ser) throws Throwable;
+        void read(FastByteReader r, T obj, OptimizedSerializer<T> ser) throws Throwable;
     }
 
     @SuppressWarnings("unchecked")
-    public GeneratedSerializer(Class<T> targetClass) {
+    public OptimizedSerializer(Class<T> targetClass) {
         this.targetClass = targetClass;
         this.fieldInfos = analyzeFields(targetClass);
         this.estimatedSize = computeEstimatedSize();
@@ -146,9 +141,11 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 case DOUBLE -> 9;   // 8 bytes + potential alignment
                 case FLOAT -> 5;    // 4 bytes + potential alignment
                 case SHORT -> 3;    // 2 bytes + potential alignment
+                case BYTE -> 2;     // 1 byte + potential alignment
                 case BOOLEAN -> 2;  // 1 byte + null marker
                 case STRING -> 48;  // Average string ~20 chars, null byte, length
                 case ENUM -> 5;     // 4 bytes (ordinal as int) + potential alignment
+                case ARRAY -> 96;   // Average array with a few elements
                 case LIST -> 96;    // Average list with a few elements
                 case MAP -> 160;    // Average map with a few entries
                 case OBJECT -> 80;  // Average nested object
@@ -156,6 +153,14 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         }
         // Add 20% buffer to minimize resizing
         return (int)(estimate * 1.2);
+    }
+
+    /**
+     * Clear the serializer cache. Useful for testing when class definitions change.
+     */
+    public static void clearCache() {
+        serializerCache.clear();
+        processingClasses.clear();
     }
 
     @Override
@@ -253,6 +258,20 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         }
     }
 
+    /**
+     * Optimized deserialization directly from an existing reader.
+     * Used for nested objects in lists/arrays.
+     */
+    @SuppressWarnings("unchecked")
+    public T deserializeDirectFromReader(FastByteReader reader, int length) throws Throwable {
+        // Read the nested object data
+        byte[] nested = new byte[length];
+        reader.readFully(nested, 0, length);
+
+        // Deserialize using the standard path (which uses reader pooling internally)
+        return (T) deserializeInternal(nested);
+    }
+
     // ==================== BYTECODE GENERATION ====================
 
     @SuppressWarnings("unchecked")
@@ -265,7 +284,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 ClassDesc.of(className),
                 classBuilder -> {
                     classBuilder.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC);
-                    classBuilder.withInterfaceSymbols(ClassDesc.of("com.kalynx.simplyabinaryserializer.GeneratedSerializer$GeneratedWriter"));
+                    classBuilder.withInterfaceSymbols(ClassDesc.of("com.kalynx.simplyabinaryserializer.OptimizedSerializer$GeneratedWriter"));
 
                     // Default constructor
                     classBuilder.withMethodBody(
@@ -280,10 +299,10 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                             }
                     );
 
-                    // write(FastByteWriter w, Object obj, GeneratedSerializer ser) method
+                    // write(FastByteWriter w, Object obj, OptimizedSerializer ser) method
                     classBuilder.withMethodBody(
                             "write",
-                            MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_Object, CD_GeneratedSerializer),
+                            MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_Object, CD_OptimizedSerializer),
                             ClassFile.ACC_PUBLIC,
                             codeBuilder -> {
                                 // Cast obj to target type and store in local 4
@@ -319,7 +338,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 ClassDesc.of(className),
                 classBuilder -> {
                     classBuilder.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC);
-                    classBuilder.withInterfaceSymbols(ClassDesc.of("com.kalynx.simplyabinaryserializer.GeneratedSerializer$GeneratedReader"));
+                    classBuilder.withInterfaceSymbols(ClassDesc.of("com.kalynx.simplyabinaryserializer.OptimizedSerializer$GeneratedReader"));
 
                     // Default constructor
                     classBuilder.withMethodBody(
@@ -334,10 +353,10 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                             }
                     );
 
-                    // read(FastByteReader r, Object obj, GeneratedSerializer ser) method
+                    // read(FastByteReader r, Object obj, OptimizedSerializer ser) method
                     classBuilder.withMethodBody(
                             "read",
-                            MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteReader, CD_Object, CD_GeneratedSerializer),
+                            MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteReader, CD_Object, CD_OptimizedSerializer),
                             ClassFile.ACC_PUBLIC,
                             codeBuilder -> {
                                 // Cast obj to target type and store in local 4
@@ -364,7 +383,13 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     }
 
     private void generateFieldWrite(CodeBuilder cb, FieldInfo fi, ClassDesc targetClassDesc) {
-        ClassDesc fieldClassDesc = ClassDesc.of(fi.field.getType().getName());
+        // Handle array types specially
+        ClassDesc fieldClassDesc;
+        if (fi.field.getType().isArray()) {
+            fieldClassDesc = ClassDesc.ofDescriptor("[" + getArrayComponentDescriptor(fi.field.getType().getComponentType()));
+        } else {
+            fieldClassDesc = ClassDesc.of(fi.field.getType().getName());
+        }
 
         switch (fi.type) {
             case INT -> {
@@ -427,6 +452,12 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.getfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_short);
                 cb.invokevirtual(CD_FastByteWriter, "writeShort", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_short));
             }
+            case BYTE -> {
+                cb.aload(1);
+                cb.aload(4);
+                cb.getfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_byte);
+                cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+            }
             case BOOLEAN -> {
                 cb.aload(1);
                 cb.aload(4);
@@ -456,10 +487,10 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.iconst_1();
                 cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
                 cb.aload(3); // serializer
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1); // writer
                 cb.aload(5); // string
-                cb.invokevirtual(CD_GeneratedSerializer, "writeStr",
+                cb.invokevirtual(CD_OptimizedSerializer, "writeStr",
                         MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_String));
 
                 cb.labelBinding(end);
@@ -485,12 +516,43 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.iconst_1();
                 cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.aload(5);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "writeListField",
+                cb.invokevirtual(CD_OptimizedSerializer, "writeListField",
                         MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_List, ConstantDescs.CD_int));
+
+                cb.labelBinding(end);
+            }
+            case ARRAY -> {
+                // Generate: if (field == null) { w.writeByte(0); } else { w.writeByte(1); ser.writeArrayField(w, field, fieldIndex); }
+                cb.aload(4);
+                ClassDesc arrayDesc = ClassDesc.ofDescriptor("[" + getArrayComponentDescriptor(fi.field.getType().getComponentType()));
+                cb.getfield(targetClassDesc, fi.field.getName(), arrayDesc);
+                cb.astore(5);
+
+                cb.aload(5);
+                Label notNull = cb.newLabel();
+                Label end = cb.newLabel();
+                cb.ifnonnull(notNull);
+
+                cb.aload(1);
+                cb.iconst_0();
+                cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                cb.goto_(end);
+
+                cb.labelBinding(notNull);
+                cb.aload(1);
+                cb.iconst_1();
+                cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
+                cb.aload(3);
+                cb.checkcast(CD_OptimizedSerializer);
+                cb.aload(1);
+                cb.aload(5);
+                cb.ldc(fi.fieldIndex);
+                cb.invokevirtual(CD_OptimizedSerializer, "writeArrayField",
+                        MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_Object, ConstantDescs.CD_int));
 
                 cb.labelBinding(end);
             }
@@ -514,11 +576,11 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.iconst_1();
                 cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.aload(5);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "writeMapField",
+                cb.invokevirtual(CD_OptimizedSerializer, "writeMapField",
                         MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_Map, ConstantDescs.CD_int));
 
                 cb.labelBinding(end);
@@ -569,11 +631,11 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.iconst_1();
                 cb.invokevirtual(CD_FastByteWriter, "writeByte", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.aload(5);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "writeObjectField",
+                cb.invokevirtual(CD_OptimizedSerializer, "writeObjectField",
                         MethodTypeDesc.of(ConstantDescs.CD_void, CD_FastByteWriter, CD_Object, ConstantDescs.CD_int));
 
                 cb.labelBinding(end);
@@ -582,7 +644,13 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     }
 
     private void generateFieldRead(CodeBuilder cb, FieldInfo fi, ClassDesc targetClassDesc) {
-        ClassDesc fieldClassDesc = ClassDesc.of(fi.field.getType().getName());
+        // Handle array types specially
+        ClassDesc fieldClassDesc;
+        if (fi.field.getType().isArray()) {
+            fieldClassDesc = ClassDesc.ofDescriptor("[" + getArrayComponentDescriptor(fi.field.getType().getComponentType()));
+        } else {
+            fieldClassDesc = ClassDesc.of(fi.field.getType().getName());
+        }
 
         switch (fi.type) {
             case INT -> {
@@ -647,6 +715,12 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 cb.invokevirtual(CD_FastByteReader, "readShort", MethodTypeDesc.of(ConstantDescs.CD_short));
                 cb.putfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_short);
             }
+            case BYTE -> {
+                cb.aload(4);
+                cb.aload(1);
+                cb.invokevirtual(CD_FastByteReader, "readByte", MethodTypeDesc.of(ConstantDescs.CD_byte));
+                cb.putfield(targetClassDesc, fi.field.getName(), ConstantDescs.CD_byte);
+            }
             case BOOLEAN -> {
                 cb.aload(4);
                 cb.aload(1);
@@ -662,9 +736,9 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
                 cb.aload(4);
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
-                cb.invokevirtual(CD_GeneratedSerializer, "readStr",
+                cb.invokevirtual(CD_OptimizedSerializer, "readStr",
                         MethodTypeDesc.of(CD_String, CD_FastByteReader));
                 cb.putfield(targetClassDesc, fi.field.getName(), CD_String);
 
@@ -678,12 +752,31 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
                 cb.aload(4);
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "readListField",
+                cb.invokevirtual(CD_OptimizedSerializer, "readListField",
                         MethodTypeDesc.of(CD_List, CD_FastByteReader, ConstantDescs.CD_int));
                 cb.putfield(targetClassDesc, fi.field.getName(), CD_List);
+
+                cb.labelBinding(skip);
+            }
+            case ARRAY -> {
+                cb.aload(1);
+                cb.invokevirtual(CD_FastByteReader, "readByte", MethodTypeDesc.of(ConstantDescs.CD_byte));
+                Label skip = cb.newLabel();
+                cb.ifeq(skip);
+
+                cb.aload(4);
+                cb.aload(3);
+                cb.checkcast(CD_OptimizedSerializer);
+                cb.aload(1);
+                cb.ldc(fi.fieldIndex);
+                cb.invokevirtual(CD_OptimizedSerializer, "readArrayField",
+                        MethodTypeDesc.of(CD_Object, CD_FastByteReader, ConstantDescs.CD_int));
+                ClassDesc arrayDesc = ClassDesc.ofDescriptor("[" + getArrayComponentDescriptor(fi.field.getType().getComponentType()));
+                cb.checkcast(arrayDesc);
+                cb.putfield(targetClassDesc, fi.field.getName(), arrayDesc);
 
                 cb.labelBinding(skip);
             }
@@ -695,10 +788,10 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
                 cb.aload(4);
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "readMapField",
+                cb.invokevirtual(CD_OptimizedSerializer, "readMapField",
                         MethodTypeDesc.of(CD_Map, CD_FastByteReader, ConstantDescs.CD_int));
                 cb.putfield(targetClassDesc, fi.field.getName(), CD_Map);
 
@@ -725,12 +818,12 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
                 // Not null - get enum value by ordinal
                 cb.labelBinding(notNull);
                 cb.aload(4); // typed obj
-                cb.aload(3); // GeneratedSerializer (this)
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.aload(3); // OptimizedSerializer (this)
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1); // reader
                 cb.iload(5); // ordinal
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "readEnumField",
+                cb.invokevirtual(CD_OptimizedSerializer, "readEnumField",
                         MethodTypeDesc.of(ClassDesc.of("java.lang.Enum"), CD_FastByteReader, ConstantDescs.CD_int, ConstantDescs.CD_int));
                 cb.checkcast(fieldClassDesc);
                 cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
@@ -745,10 +838,10 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
                 cb.aload(4);
                 cb.aload(3);
-                cb.checkcast(CD_GeneratedSerializer);
+                cb.checkcast(CD_OptimizedSerializer);
                 cb.aload(1);
                 cb.ldc(fi.fieldIndex);
-                cb.invokevirtual(CD_GeneratedSerializer, "readObjectField",
+                cb.invokevirtual(CD_OptimizedSerializer, "readObjectField",
                         MethodTypeDesc.of(CD_Object, CD_FastByteReader, ConstantDescs.CD_int));
                 cb.checkcast(fieldClassDesc);
                 cb.putfield(targetClassDesc, fi.field.getName(), fieldClassDesc);
@@ -760,45 +853,37 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
     // ==================== HELPER METHODS CALLED BY GENERATED CODE ====================
 
+    private String getArrayComponentDescriptor(Class<?> componentType) {
+        if (componentType == int.class) return "I";
+        if (componentType == long.class) return "J";
+        if (componentType == boolean.class) return "Z";
+        if (componentType == double.class) return "D";
+        if (componentType == float.class) return "F";
+        if (componentType == short.class) return "S";
+        if (componentType == byte.class) return "B";
+        if (componentType == char.class) return "C";
+        if (componentType == String.class) return "Ljava/lang/String;";
+        return "L" + componentType.getName().replace('.', '/') + ";";
+    }
+
     public void writeStr(FastByteWriter w, String s) {
-        int len = s.length();
-
-        // Fast path for ASCII-only strings (most common case)
-        if (len < 128) {
-            boolean isAscii = true;
-            for (int i = 0; i < len; i++) {
-                if (s.charAt(i) >= 0x80) {
-                    isAscii = false;
-                    break;
-                }
-            }
-
-            if (isAscii) {
-                // Pure ASCII - write length and chars directly
-                w.writeByte((byte) len);
-                for (int i = 0; i < len; i++) {
-                    w.writeByte((byte) s.charAt(i));
-                }
-                return;
-            }
+        if (s == null) {
+            w.writeByte((byte) 255); // Marker for special handling
+            w.writeInt(-1); // Use -1 to indicate null
+            return;
         }
 
-        // Non-ASCII or long string - use UTF-8 encoding
-        int maxBytes = len * 3;
-        if (maxBytes <= 255) {
-            byte[] buf = STRING_BUFFER.get();
-            if (buf.length < maxBytes) {
-                buf = new byte[maxBytes];
-                STRING_BUFFER.set(buf);
-            }
-            int actualLen = encodeUTF8(s, buf);
-            w.writeByte((byte) actualLen);
-            w.writeBytes(buf, actualLen);
+        // Always use Java's UTF-8 encoder which handles surrogate pairs correctly
+        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        int len = bytes.length;
+
+        if (len < 255) {
+            w.writeByte((byte) len);
+            w.writeBytes(bytes, len);
         } else {
-            byte[] b = s.getBytes(StandardCharsets.UTF_8);
             w.writeByte((byte) 255);
-            w.writeInt(b.length);
-            w.writeBytes(b, b.length);
+            w.writeInt(len);
+            w.writeBytes(bytes, len);
         }
     }
 
@@ -806,6 +891,9 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         int len = r.readByte() & 0xFF;
         if (len == 255) {
             len = r.readInt();
+            if (len == -1) {
+                return null; // Null string marker
+            }
         }
 
         // Use pooled buffer for small strings to reduce allocation overhead
@@ -850,30 +938,33 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         w.writeInt(size);
         if (size == 0) return;
 
-        switch (fi.listElementType) {
-            case INT -> { for (int i = 0; i < size; i++) w.writeInt((Integer) list.get(i)); }
-            case LONG -> { for (int i = 0; i < size; i++) w.writeLong((Long) list.get(i)); }
-            case STRING -> { for (int i = 0; i < size; i++) writeStr(w, (String) list.get(i)); }
-            case BOOLEAN -> { for (int i = 0; i < size; i++) w.writeBoolean((Boolean) list.get(i)); }
-            case DOUBLE -> { for (int i = 0; i < size; i++) w.writeDouble((Double) list.get(i)); }
-            case FLOAT -> { for (int i = 0; i < size; i++) w.writeFloat((Float) list.get(i)); }
-            case SHORT -> { for (int i = 0; i < size; i++) w.writeShort((Short) list.get(i)); }
-            case ENUM -> {
+        // Fast path: use pre-allocated writer for primitives and strings
+        if (fi.listElementType != FieldType.OBJECT) {
+            ListElementWriter writer = fi.listWriter;
+            for (int i = 0; i < size; i++) {
+                writer.write(w, list.get(i));
+            }
+        } else {
+            // Object path: check if we have a nested serializer
+            if (fi.nestedSerializer != null) {
+                // Optimized path for custom objects with nested serializer
                 for (int i = 0; i < size; i++) {
-                    Enum<?> e = (Enum<?>) list.get(i);
-                    w.writeInt(e == null ? -1 : e.ordinal());
-                }
-            }
-            case OBJECT -> {
-                if (fi.nestedSerializer != null) {
-                    for (int i = 0; i < size; i++) {
-                        byte[] nested = fi.nestedSerializer.serializeInternal(list.get(i));
+                    byte[] nested = fi.nestedSerializer.serializeInternal(list.get(i));
+                    if (nested.length < 255) {
                         w.writeByte((byte) nested.length);
-                        w.writeBytes(nested, nested.length);
+                    } else {
+                        w.writeByte((byte) 255);
+                        w.writeInt(nested.length);
                     }
+                    w.writeBytes(nested, nested.length);
+                }
+            } else {
+                // Fallback path for nested collections (uses pre-allocated handler)
+                ListElementWriter writer = fi.listWriter;
+                for (int i = 0; i < size; i++) {
+                    writer.write(w, list.get(i));
                 }
             }
-            default -> {}
         }
     }
 
@@ -884,46 +975,158 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
         List<Object> list = new ArrayList<>(size); // Pre-sized to avoid resizing
 
-        switch (fi.listElementType) {
+        // Fast path: use pre-allocated reader for primitives and strings
+        if (fi.listElementType != FieldType.OBJECT) {
+            ListElementReader reader = fi.listReader;
+            for (int i = 0; i < size; i++) {
+                list.add(reader.read(r));
+            }
+        } else {
+            // Object path: check if we have a nested serializer
+            if (fi.nestedSerializer != null) {
+                // Optimized path for custom objects with nested serializer
+                for (int i = 0; i < size; i++) {
+                    int len = r.readByte() & 0xFF;
+                    if (len == 255) {
+                        len = r.readInt();
+                    }
+                    Object obj = fi.nestedSerializer.deserializeDirectFromReader(r, len);
+                    list.add(obj);
+                }
+            } else {
+                // Fallback path for nested collections (uses pre-allocated handler)
+                ListElementReader reader = fi.listReader;
+                for (int i = 0; i < size; i++) {
+                    list.add(reader.read(r));
+                }
+            }
+        }
+        return list;
+    }
+
+    public void writeArrayField(FastByteWriter w, Object array, int fieldIndex) throws Throwable {
+        FieldInfo fi = fieldInfos[fieldIndex];
+        int length = java.lang.reflect.Array.getLength(array);
+        w.writeInt(length);
+        if (length == 0) return;
+
+        switch (fi.arrayElementType) {
             case INT -> {
-                // Read directly without autoboxing overhead where possible
-                for (int i = 0; i < size; i++) list.add(r.readInt());
+                int[] arr = (int[]) array;
+                for (int val : arr) w.writeInt(val);
             }
-            case LONG -> { for (int i = 0; i < size; i++) list.add(r.readLong()); }
+            case LONG -> {
+                long[] arr = (long[]) array;
+                for (long val : arr) w.writeLong(val);
+            }
+            case BOOLEAN -> {
+                boolean[] arr = (boolean[]) array;
+                for (boolean val : arr) w.writeBoolean(val);
+            }
+            case DOUBLE -> {
+                double[] arr = (double[]) array;
+                for (double val : arr) w.writeDouble(val);
+            }
+            case FLOAT -> {
+                float[] arr = (float[]) array;
+                for (float val : arr) w.writeFloat(val);
+            }
+            case SHORT -> {
+                short[] arr = (short[]) array;
+                for (short val : arr) w.writeShort(val);
+            }
+            case BYTE -> {
+                byte[] arr = (byte[]) array;
+                for (byte val : arr) w.writeByte(val);
+            }
             case STRING -> {
-                // Optimize for common case of string lists
-                for (int i = 0; i < size; i++) {
-                    list.add(readStr(r));
-                }
-            }
-            case BOOLEAN -> { for (int i = 0; i < size; i++) list.add(r.readBoolean()); }
-            case DOUBLE -> { for (int i = 0; i < size; i++) list.add(r.readDouble()); }
-            case FLOAT -> { for (int i = 0; i < size; i++) list.add(r.readFloat()); }
-            case SHORT -> { for (int i = 0; i < size; i++) list.add(r.readShort()); }
-            case ENUM -> {
-                Class<?> enumClass = fi.field.getType();
-                // Extract actual enum type from List<EnumType>
-                Type genericType = fi.field.getGenericType();
-                Class<?> enumType = extractGenericType(genericType, 0);
-                Object[] enumConstants = enumType.getEnumConstants();
-                for (int i = 0; i < size; i++) {
-                    int ordinal = r.readInt();
-                    list.add(ordinal == -1 ? null : enumConstants[ordinal]);
-                }
+                String[] arr = (String[]) array;
+                for (String val : arr) writeStr(w, val);
             }
             case OBJECT -> {
-                if (fi.nestedSerializer != null) {
-                    for (int i = 0; i < size; i++) {
-                        int len = r.readByte() & 0xFF;
-                        byte[] nested = new byte[len];
-                        r.readFully(nested, 0, len);
-                        list.add(fi.nestedSerializer.deserializeInternal(nested));
+                Object[] arr = (Object[]) array;
+                for (Object val : arr) {
+                    byte[] nested = fi.nestedSerializer.serializeInternal(val);
+                    // Use 1 byte for small objects, extended length for larger ones
+                    if (nested.length < 255) {
+                        w.writeByte((byte) nested.length);
+                    } else {
+                        w.writeByte((byte) 255); // Marker for extended length
+                        w.writeInt(nested.length);
                     }
+                    w.writeBytes(nested, nested.length);
                 }
             }
             default -> {}
         }
-        return list;
+    }
+
+    public Object readArrayField(FastByteReader r, int fieldIndex) throws Throwable {
+        FieldInfo fi = fieldInfos[fieldIndex];
+        int length = r.readInt();
+        if (length == 0) {
+            return java.lang.reflect.Array.newInstance(fi.field.getType().getComponentType(), 0);
+        }
+
+        switch (fi.arrayElementType) {
+            case INT -> {
+                int[] arr = new int[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readInt();
+                return arr;
+            }
+            case LONG -> {
+                long[] arr = new long[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readLong();
+                return arr;
+            }
+            case BOOLEAN -> {
+                boolean[] arr = new boolean[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readBoolean();
+                return arr;
+            }
+            case DOUBLE -> {
+                double[] arr = new double[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readDouble();
+                return arr;
+            }
+            case FLOAT -> {
+                float[] arr = new float[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readFloat();
+                return arr;
+            }
+            case SHORT -> {
+                short[] arr = new short[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readShort();
+                return arr;
+            }
+            case BYTE -> {
+                byte[] arr = new byte[length];
+                for (int i = 0; i < length; i++) arr[i] = r.readByte();
+                return arr;
+            }
+            case STRING -> {
+                String[] arr = new String[length];
+                for (int i = 0; i < length; i++) arr[i] = readStr(r);
+                return arr;
+            }
+            case OBJECT -> {
+                Class<?> componentType = fi.field.getType().getComponentType();
+                Object[] arr = (Object[]) java.lang.reflect.Array.newInstance(componentType, length);
+                for (int i = 0; i < length; i++) {
+                    int nestedLen = r.readByte() & 0xFF;
+                    if (nestedLen == 255) {
+                        // Extended length for larger objects
+                        nestedLen = r.readInt();
+                    }
+                    // Direct deserialization without intermediate byte array
+                    arr[i] = fi.nestedSerializer.deserializeDirectFromReader(r, nestedLen);
+                }
+                return arr;
+            }
+            default -> {
+                return null;
+            }
+        }
     }
 
     public void writeMapField(FastByteWriter w, Map<?, ?> map, int fieldIndex) throws Throwable {
@@ -947,6 +1150,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case DOUBLE -> w.writeDouble((Double) key);
             case FLOAT -> w.writeFloat((Float) key);
             case SHORT -> w.writeShort((Short) key);
+            case BYTE -> w.writeByte((Byte) key);
             default -> {}
         }
     }
@@ -960,6 +1164,24 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case DOUBLE -> w.writeDouble((Double) value);
             case FLOAT -> w.writeFloat((Float) value);
             case SHORT -> w.writeShort((Short) value);
+            case BYTE -> w.writeByte((Byte) value);
+            case OBJECT -> {
+                // Fallback for nested collections or complex objects
+                if (value == null) {
+                    w.writeInt(-1);
+                } else {
+                    try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                         java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(baos)) {
+                        oos.writeObject(value);
+                        oos.flush();
+                        byte[] data = baos.toByteArray();
+                        w.writeInt(data.length);
+                        w.writeBytes(data, data.length);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to serialize map value", e);
+                    }
+                }
+            }
             default -> {}
         }
     }
@@ -1005,6 +1227,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case DOUBLE -> r.readDouble();
             case FLOAT -> r.readFloat();
             case SHORT -> r.readShort();
+            case BYTE -> r.readByte();
             default -> null;
         };
     }
@@ -1018,6 +1241,21 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             case DOUBLE -> r.readDouble();
             case FLOAT -> r.readFloat();
             case SHORT -> r.readShort();
+            case BYTE -> r.readByte();
+            case OBJECT -> {
+                // Fallback for nested collections or complex objects
+                int len = r.readInt();
+                if (len == -1) {
+                    yield null;
+                }
+                byte[] data = new byte[len];
+                r.readFully(data, 0, len);
+                try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(data))) {
+                    yield ois.readObject();
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to deserialize map value", e);
+                }
+            }
             default -> null;
         };
     }
@@ -1040,19 +1278,19 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         w.writeByte(TYPE_OBJECT);
 
         // Optimize: Write nested object directly to parent writer instead of creating intermediate byte[]
-        GeneratedSerializer<?> serializer = fi.nestedSerializer;
+        OptimizedSerializer<?> serializer = fi.nestedSerializer;
         if (serializer == null) {
             // Handle case where serializer wasn't created (circular reference schema)
             serializer = serializerCache.get(obj.getClass());
             if (serializer == null) {
-                serializer = new GeneratedSerializer<>(obj.getClass());
+                serializer = new OptimizedSerializer<>(obj.getClass());
                 serializerCache.put(obj.getClass(), serializer);
             }
         }
 
         // Write nested object directly using the serializer's writer
         @SuppressWarnings("unchecked")
-        GeneratedSerializer<Object> objSerializer = (GeneratedSerializer<Object>) serializer;
+        OptimizedSerializer<Object> objSerializer = (OptimizedSerializer<Object>) serializer;
         objSerializer.generatedWriter.write(w, obj, objSerializer);
     }
 
@@ -1069,20 +1307,20 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         }
 
         // Optimize: Read nested object directly from parent reader instead of creating intermediate byte[]
-        GeneratedSerializer<?> serializer = fi.nestedSerializer;
+        OptimizedSerializer<?> serializer = fi.nestedSerializer;
         if (serializer == null) {
             // Handle case where serializer wasn't created
             Class<?> fieldType = fi.field.getType();
             serializer = serializerCache.get(fieldType);
             if (serializer == null) {
-                serializer = new GeneratedSerializer<>(fieldType);
+                serializer = new OptimizedSerializer<>(fieldType);
                 serializerCache.put(fieldType, serializer);
             }
         }
 
         // Create instance and read directly using MethodHandle
         @SuppressWarnings("unchecked")
-        GeneratedSerializer<Object> objSerializer = (GeneratedSerializer<Object>) serializer;
+        OptimizedSerializer<Object> objSerializer = (OptimizedSerializer<Object>) serializer;
         Object instance = objSerializer.constructorHandle.invoke();
         objSerializer.generatedReader.read(r, instance, objSerializer);
         return instance;
@@ -1106,6 +1344,94 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         return infos.toArray(new FieldInfo[0]);
     }
 
+    private ListElementWriter createListWriter(FieldType elementType, Class<?> elementClass) {
+        return switch (elementType) {
+            case INT -> (w, e) -> w.writeInt((Integer) e);
+            case LONG -> (w, e) -> w.writeLong((Long) e);
+            case STRING -> (w, e) -> writeStr(w, (String) e);
+            case BOOLEAN -> (w, e) -> w.writeBoolean((Boolean) e);
+            case DOUBLE -> (w, e) -> w.writeDouble((Double) e);
+            case FLOAT -> (w, e) -> w.writeFloat((Float) e);
+            case SHORT -> (w, e) -> w.writeShort((Short) e);
+            case BYTE -> (w, e) -> w.writeByte((Byte) e);
+            case ENUM -> (w, e) -> {
+                Enum<?> enumVal = (Enum<?>) e;
+                w.writeInt(enumVal == null ? -1 : enumVal.ordinal());
+            };
+            case OBJECT -> createObjectListWriter(elementClass);
+            default -> (w, e) -> {}; // No-op for unsupported types
+        };
+    }
+
+    private ListElementWriter createObjectListWriter(Class<?> elementClass) {
+        // Check if it's a nested collection type
+        if (List.class.isAssignableFrom(elementClass) || Map.class.isAssignableFrom(elementClass)) {
+            // Fallback: Java serialization for nested collections
+            return (w, obj) -> {
+                if (obj == null) {
+                    w.writeInt(-1);
+                } else {
+                    try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                         java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(baos)) {
+                        oos.writeObject(obj);
+                        oos.flush();
+                        byte[] data = baos.toByteArray();
+                        w.writeInt(data.length);
+                        w.writeBytes(data, data.length);
+                    }
+                }
+            };
+        } else {
+            // Use nested OptimizedSerializer (will be set in nestedSerializer field)
+            return (w, obj) -> {
+                // This will be called with fi.nestedSerializer already available
+                throw new UnsupportedOperationException("Should use nestedSerializer path");
+            };
+        }
+    }
+
+    private ListElementReader createListReader(FieldType elementType, Class<?> elementClass) {
+        return switch (elementType) {
+            case INT -> r -> r.readInt();
+            case LONG -> r -> r.readLong();
+            case STRING -> this::readStr;
+            case BOOLEAN -> r -> r.readBoolean();
+            case DOUBLE -> r -> r.readDouble();
+            case FLOAT -> r -> r.readFloat();
+            case SHORT -> r -> r.readShort();
+            case BYTE -> r -> r.readByte();
+            case ENUM -> r -> {
+                int ordinal = r.readInt();
+                if (ordinal == -1) return null;
+                return elementClass.getEnumConstants()[ordinal];
+            };
+            case OBJECT -> createObjectListReader(elementClass);
+            default -> r -> null; // No-op for unsupported types
+        };
+    }
+
+    private ListElementReader createObjectListReader(Class<?> elementClass) {
+        // Check if it's a nested collection type
+        if (List.class.isAssignableFrom(elementClass) || Map.class.isAssignableFrom(elementClass)) {
+            // Fallback: Java deserialization for nested collections
+            return r -> {
+                int len = r.readInt();
+                if (len == -1) return null;
+                byte[] data = new byte[len];
+                r.readFully(data, 0, len);
+                try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(data))) {
+                    return ois.readObject();
+                }
+            };
+        } else {
+            // Use nested OptimizedSerializer (will be set in nestedSerializer field)
+            return r -> {
+                // This will be called with fi.nestedSerializer already available
+                throw new UnsupportedOperationException("Should use nestedSerializer path");
+            };
+        }
+    }
+
     private FieldInfo analyzeField(Field field, int index) {
         Class<?> fieldType = field.getType();
         FieldInfo fi = new FieldInfo();
@@ -1124,15 +1450,32 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             fi.type = FieldType.FLOAT;
         } else if (fieldType == short.class || fieldType == Short.class) {
             fi.type = FieldType.SHORT;
+        } else if (fieldType == byte.class || fieldType == Byte.class) {
+            fi.type = FieldType.BYTE;
         } else if (fieldType == String.class) {
             fi.type = FieldType.STRING;
+        } else if (fieldType.isArray()) {
+            fi.type = FieldType.ARRAY;
+            Class<?> componentType = fieldType.getComponentType();
+            fi.arrayElementType = determineFieldType(componentType);
+            if (fi.arrayElementType == FieldType.OBJECT) {
+                fi.nestedSerializer = new OptimizedSerializer<>(componentType);
+            }
         } else if (List.class.isAssignableFrom(fieldType)) {
             fi.type = FieldType.LIST;
             Type genericType = field.getGenericType();
             Class<?> elementType = extractGenericType(genericType, 0);
             fi.listElementType = determineFieldType(elementType);
+
+            // Pre-allocate list handlers based on element type (eliminates runtime switch)
+            fi.listWriter = createListWriter(fi.listElementType, elementType);
+            fi.listReader = createListReader(fi.listElementType, elementType);
+
             if (fi.listElementType == FieldType.OBJECT) {
-                fi.nestedSerializer = new GeneratedSerializer<>(elementType);
+                // Skip creating serializers for nested collection types (List<List<>>, List<Map<>>)
+                if (!List.class.isAssignableFrom(elementType) && !Map.class.isAssignableFrom(elementType)) {
+                    fi.nestedSerializer = new OptimizedSerializer<>(elementType);
+                }
             }
         } else if (Map.class.isAssignableFrom(fieldType)) {
             fi.type = FieldType.MAP;
@@ -1144,7 +1487,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         } else {
             fi.type = FieldType.OBJECT;
             // Use cache to prevent infinite recursion for self-referencing objects
-            GeneratedSerializer<?> cached = serializerCache.get(fieldType);
+            OptimizedSerializer<?> cached = serializerCache.get(fieldType);
             if (cached != null) {
                 fi.nestedSerializer = cached;
             } else if (processingClasses.contains(fieldType)) {
@@ -1154,7 +1497,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
             } else {
                 try {
                     processingClasses.add(fieldType);
-                    fi.nestedSerializer = new GeneratedSerializer<>(fieldType);
+                    fi.nestedSerializer = new OptimizedSerializer<>(fieldType);
                     serializerCache.put(fieldType, fi.nestedSerializer);
                 } finally {
                     processingClasses.remove(fieldType);
@@ -1168,8 +1511,17 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
     private Class<?> extractGenericType(Type genericType, int index) {
         if (genericType instanceof ParameterizedType) {
             Type[] typeArgs = ((ParameterizedType) genericType).getActualTypeArguments();
-            if (typeArgs.length > index && typeArgs[index] instanceof Class) {
-                return (Class<?>) typeArgs[index];
+            if (typeArgs.length > index) {
+                Type typeArg = typeArgs[index];
+                if (typeArg instanceof Class) {
+                    return (Class<?>) typeArg;
+                } else if (typeArg instanceof ParameterizedType) {
+                    // Nested generic like List<List<Integer>> - return raw type
+                    Type rawType = ((ParameterizedType) typeArg).getRawType();
+                    if (rawType instanceof Class) {
+                        return (Class<?>) rawType;
+                    }
+                }
             }
         }
         return Object.class;
@@ -1182,6 +1534,7 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
         if (clazz == double.class || clazz == Double.class) return FieldType.DOUBLE;
         if (clazz == float.class || clazz == Float.class) return FieldType.FLOAT;
         if (clazz == short.class || clazz == Short.class) return FieldType.SHORT;
+        if (clazz == byte.class || clazz == Byte.class) return FieldType.BYTE;
         if (clazz == String.class) return FieldType.STRING;
         if (clazz.isEnum()) return FieldType.ENUM;
         return FieldType.OBJECT;
@@ -1189,17 +1542,33 @@ public class GeneratedSerializer<T> implements Serializer, Deserializer {
 
     // ==================== INNER CLASSES ====================
 
+    // Functional interfaces for pre-allocated list operations
+    @FunctionalInterface
+    private interface ListElementWriter {
+        void write(FastByteWriter w, Object element) throws Throwable;
+    }
+
+    @FunctionalInterface
+    private interface ListElementReader {
+        Object read(FastByteReader r) throws Throwable;
+    }
+
     private static class FieldInfo {
         Field field;
         int fieldIndex;
         FieldType type;
         FieldType listElementType;
+        FieldType arrayElementType;
         FieldType mapKeyType;
         FieldType mapValueType;
-        GeneratedSerializer<?> nestedSerializer;
+        OptimizedSerializer<?> nestedSerializer;
+
+        // Pre-allocated handlers for list operations (eliminates runtime switch)
+        ListElementWriter listWriter;
+        ListElementReader listReader;
     }
 
-    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, STRING, LIST, MAP, OBJECT, ENUM }
+    private enum FieldType { INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, BYTE, STRING, LIST, MAP, OBJECT, ENUM, ARRAY }
 }
 
 

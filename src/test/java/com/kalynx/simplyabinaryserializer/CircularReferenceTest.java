@@ -5,15 +5,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for circular reference handling in GeneratedSerializer
+ * Tests for circular reference handling in OptimizedSerializer
  */
 public class CircularReferenceTest {
 
-    private GeneratedSerializer<CircularNode> serializer;
+    private OptimizedSerializer<CircularNode> serializer;
 
     @BeforeEach
     public void setUp() {
-        serializer = new GeneratedSerializer<>(CircularNode.class);
+        serializer = new OptimizedSerializer<>(CircularNode.class);
     }
 
     @Test
