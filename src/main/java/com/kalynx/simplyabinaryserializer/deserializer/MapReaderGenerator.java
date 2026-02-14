@@ -174,20 +174,42 @@ public class MapReaderGenerator {
             cb.invokevirtual(CD_FastByteReader, "readLong", MTD_long);
             cb.invokestatic(ConstantDescs.CD_Long, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Long, ConstantDescs.CD_long));
         } else if (keyType == String.class) {
-            // Read short for length, then readBytes, convert to String
+            // OPTIMIZED: Use String(byte[], int offset, int length, Charset) constructor
+            // This avoids allocating an intermediate byte[] array
+
             // short len = reader.readShort();
             cb.invokevirtual(CD_FastByteReader, "readShort", MTD_short);
-            // byte[] bytes = reader.readBytes(len);
-            cb.aload(1); // reader
-            cb.swap();
-            cb.invokevirtual(CD_FastByteReader, "readBytes", MTD_byte_array_int);
-            // new String(bytes, UTF_8)
+            cb.istore(5); // len
+
+            // new String(reader.getBuffer(), reader.getPosition(), len, UTF_8)
             cb.new_(ConstantDescs.CD_String);
-            cb.dup_x1();
-            cb.swap();
+            cb.dup();
+
+            // Get buffer: reader.getBuffer()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getBuffer", MTD_byte_array);
+
+            // Get current position: reader.getPosition()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+
+            // Length
+            cb.iload(5); // len
+
+            // UTF_8 charset
             cb.getstatic(CD_StandardCharsets, "UTF_8", CD_Charset);
+
+            // Invoke String(byte[], int, int, Charset) constructor
             cb.invokespecial(ConstantDescs.CD_String, ConstantDescs.INIT_NAME,
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, CD_Charset));
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, ConstantDescs.CD_int, ConstantDescs.CD_int, CD_Charset));
+
+            // Advance reader position manually
+            cb.aload(1); // reader
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+            cb.iload(5); // len
+            cb.iadd();
+            cb.invokevirtual(CD_FastByteReader, "setPosition", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
         } else if (keyType == double.class || keyType == Double.class) {
             cb.invokevirtual(CD_FastByteReader, "readDouble", MTD_double);
             cb.invokestatic(ConstantDescs.CD_Double, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Double, ConstantDescs.CD_double));
@@ -221,20 +243,42 @@ public class MapReaderGenerator {
             cb.invokevirtual(CD_FastByteReader, "readLong", MTD_long);
             cb.invokestatic(ConstantDescs.CD_Long, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Long, ConstantDescs.CD_long));
         } else if (valueType == String.class) {
-            // Read short for length, then readBytes, convert to String
+            // OPTIMIZED: Use String(byte[], int offset, int length, Charset) constructor
+            // This avoids allocating an intermediate byte[] array
+
             // short len = reader.readShort();
             cb.invokevirtual(CD_FastByteReader, "readShort", MTD_short);
-            // byte[] bytes = reader.readBytes(len);
-            cb.aload(1); // reader
-            cb.swap();
-            cb.invokevirtual(CD_FastByteReader, "readBytes", MTD_byte_array_int);
-            // new String(bytes, UTF_8)
+            cb.istore(6); // len (use slot 6 to avoid conflict with key's slot 5)
+
+            // new String(reader.getBuffer(), reader.getPosition(), len, UTF_8)
             cb.new_(ConstantDescs.CD_String);
-            cb.dup_x1();
-            cb.swap();
+            cb.dup();
+
+            // Get buffer: reader.getBuffer()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getBuffer", MTD_byte_array);
+
+            // Get current position: reader.getPosition()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+
+            // Length
+            cb.iload(6); // len
+
+            // UTF_8 charset
             cb.getstatic(CD_StandardCharsets, "UTF_8", CD_Charset);
+
+            // Invoke String(byte[], int, int, Charset) constructor
             cb.invokespecial(ConstantDescs.CD_String, ConstantDescs.INIT_NAME,
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, CD_Charset));
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, ConstantDescs.CD_int, ConstantDescs.CD_int, CD_Charset));
+
+            // Advance reader position manually
+            cb.aload(1); // reader
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+            cb.iload(6); // len
+            cb.iadd();
+            cb.invokevirtual(CD_FastByteReader, "setPosition", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
         } else if (valueType == double.class || valueType == Double.class) {
             cb.invokevirtual(CD_FastByteReader, "readDouble", MTD_double);
             cb.invokestatic(ConstantDescs.CD_Double, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Double, ConstantDescs.CD_double));

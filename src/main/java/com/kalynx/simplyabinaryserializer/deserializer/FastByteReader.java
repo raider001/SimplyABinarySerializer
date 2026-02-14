@@ -92,6 +92,10 @@ public final class FastByteReader {
         return pos;
     }
 
+    public final void setPosition(int position) {
+        this.pos = position;
+    }
+
     public final byte[] getBuffer() {
         return buf;
     }

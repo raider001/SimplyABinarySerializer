@@ -173,18 +173,38 @@ public class ListReaderGenerator {
 
             cb.labelBinding(notNullLabel);
 
-            // byte[] bytes = reader.readBytes(len);
-            cb.aload(1); // reader
-            cb.iload(5); // len
-            cb.invokevirtual(CD_FastByteReader, "readBytes", MTD_byte_array_int);
+            // OPTIMIZED: Use String(byte[], int offset, int length, Charset) constructor
+            // This avoids allocating an intermediate byte[] array
 
-            // new String(bytes, UTF_8)
+            // new String(reader.getBuffer(), reader.getPosition(), len, UTF_8)
             cb.new_(ConstantDescs.CD_String);
-            cb.dup_x1();
-            cb.swap();
+            cb.dup();
+
+            // Get buffer: reader.getBuffer()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getBuffer", MTD_byte_array);
+
+            // Get current position: reader.getPosition()
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+
+            // Length
+            cb.iload(5); // len
+
+            // UTF_8 charset
             cb.getstatic(CD_StandardCharsets, "UTF_8", CD_Charset);
+
+            // Invoke String(byte[], int, int, Charset) constructor
             cb.invokespecial(ConstantDescs.CD_String, ConstantDescs.INIT_NAME,
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, CD_Charset));
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, ConstantDescs.CD_int, ConstantDescs.CD_int, CD_Charset));
+
+            // Advance reader position manually
+            cb.aload(1); // reader
+            cb.aload(1); // reader
+            cb.invokevirtual(CD_FastByteReader, "getPosition", MTD_int);
+            cb.iload(5); // len
+            cb.iadd();
+            cb.invokevirtual(CD_FastByteReader, "setPosition", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int));
 
             cb.labelBinding(endLabel);
         } else {
