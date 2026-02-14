@@ -164,30 +164,34 @@ public class ListWriterGenerator {
 
         // Not null case - write marker and value
         if (elementType == String.class) {
+            // ULTRA-OPTIMIZED: Direct UTF-8 encoding without intermediate byte array
             // String str = (String) elem;
             cb.checkcast(ConstantDescs.CD_String);
             cb.astore(5); // str
 
-            // byte[] bytes = str.getBytes(UTF_8);
-            cb.aload(5);
-            cb.getstatic(CD_StandardCharsets, "UTF_8", CD_Charset);
-            cb.invokevirtual(ConstantDescs.CD_String, "getBytes",
-                    MethodTypeDesc.of(CD_byte_array, CD_Charset));
-            cb.astore(6); // bytes
-
-            // writer.writeInt(bytes.length);
+            // int lengthPos = writer.getPosition();
             cb.aload(1); // writer
-            cb.aload(6); // bytes
-            cb.arraylength();
+            cb.invokevirtual(CD_FastByteWriter, "getPosition", MethodTypeDesc.of(ConstantDescs.CD_int));
+            cb.istore(6); // lengthPos
+
+            // writer.writeInt(0); // Placeholder
+            cb.aload(1); // writer
+            cb.iconst_0();
             cb.invokevirtual(CD_FastByteWriter, "writeInt", MTD_void_int);
 
-            // writer.writeBytes(bytes, bytes.length);
+            // int bytesWritten = writer.writeStringUTF8Direct(str);
             cb.aload(1); // writer
-            cb.aload(6); // bytes
-            cb.aload(6); // bytes
-            cb.arraylength();
-            cb.invokevirtual(CD_FastByteWriter, "writeBytes",
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array, ConstantDescs.CD_int));
+            cb.aload(5); // str
+            cb.invokevirtual(CD_FastByteWriter, "writeStringUTF8Direct",
+                    MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_String));
+            cb.istore(7); // bytesWritten
+
+            // writer.setInt(lengthPos, bytesWritten);
+            cb.aload(1); // writer
+            cb.iload(6); // lengthPos
+            cb.iload(7); // bytesWritten
+            cb.invokevirtual(CD_FastByteWriter, "setInt",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int, ConstantDescs.CD_int));
         } else {
             // writer.writeBoolean(true);
             cb.aload(1); // writer

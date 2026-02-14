@@ -5,6 +5,8 @@ package com.kalynx.simplyabinaryserializer.deserializer;
  * Avoids DataInputStream method call overhead for hot paths.
  */
 public final class FastByteReader {
+    private static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+
     private byte[] buf;
     private int pos;
 
@@ -79,16 +81,13 @@ public final class FastByteReader {
     }
 
     /**
-     * ULTRA-OPTIMIZED String reading method.
-     * Reads a String directly from the buffer without intermediate allocations.
-     * This is faster than calling getBuffer()/getPosition() separately.
+     * OPTIMIZED String reading method.
      *
-     * Uses StringCoding.decode which is JVM-optimized for UTF-8.
+     * Uses cached UTF-8 Charset to avoid method call overhead.
+     * String constructor will use COMPACT_STRINGS optimization for ASCII automatically.
      */
     public final String readStringDirect(int len) {
-        // Use the fast String constructor that takes byte[], offset, length
-        // and uses COMPACT_STRINGS optimization internally
-        String result = new String(buf, pos, len, java.nio.charset.StandardCharsets.UTF_8);
+        String result = new String(buf, pos, len, UTF_8);
         pos += len;
         return result;
     }
