@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.kalynx</groupId>
-    <artifactId>SimplyABinarySerializer</artifactId>
+    <groupId>com.github.raider001</groupId>
+    <artifactId>simplyabinaryserializer</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.25</logback.version>
@@ -36,22 +36,26 @@
         <developer>
             <id>raider001</id>
             <name>raider001</name>
+            <email>furnell.daniel@gmail.com</email>
+            <url>https://github.com/raider001</url>
         </developer>
     </developers>
 
     <scm>
         <connection>scm:git:git://github.com/raider001/SimplyABinarySerializer.git</connection>
-        <developerConnection>scm:git:ssh://github.com:raider001/SimplyABinarySerializer.git</developerConnection>
+        <developerConnection>scm:git:git@github.com:raider001/SimplyABinarySerializer.git</developerConnection>
         <url>https://github.com/raider001/SimplyABinarySerializer/tree/master</url>
     </scm>
+
 
     <distributionManagement>
         <repository>
             <id>github</id>
-            <name>raider001</name>
+            <name>GitHub raider001 Apache Maven Packages</name>
             <url>https://maven.pkg.github.com/raider001/SimplyABinarySerializer</url>
         </repository>
     </distributionManagement>
+
 
     <dependencies>
         <!-- Logging -->
