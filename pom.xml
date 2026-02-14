@@ -10,11 +10,41 @@
     </parent>
 
     <artifactId>SimplyABinarySerializer</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>SimplyABinarySerializer</name>
-    <description>High-performance binary serialization library</description>
+    <description>High-performance binary serialization library with compile-time code generation for minimal runtime overhead</description>
+    <url>https://github.com/raider001/SimplyABinarySerializer</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>raider001</id>
+            <name>raider001</name>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/raider001/SimplyABinarySerializer.git</connection>
+        <developerConnection>scm:git:ssh://github.com:raider001/SimplyABinarySerializer.git</developerConnection>
+        <url>https://github.com/raider001/SimplyABinarySerializer/tree/main</url>
+    </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>raider001</name>
+            <url>https://maven.pkg.github.com/raider001/SimplyABinarySerializer</url>
+        </repository>
+    </distributionManagement>
 
     <dependencies>
         <!-- Logging -->
@@ -62,7 +92,7 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.25.1</version>
+            <version>4.29.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -96,14 +126,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Apache Avro -->
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.11.3</version>
-            <scope>test</scope>
-        </dependency>
-
         <!-- Gson - Google's JSON library -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -131,6 +153,47 @@
                     <source>25</source>
                     <target>25</target>
                 </configuration>
+            </plugin>
+
+            <!-- Generate sources jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Generate javadoc jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <doclint>none</doclint>
+                    <quiet>true</quiet>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire for tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
         </plugins>
     </build>
