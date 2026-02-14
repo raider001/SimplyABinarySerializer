@@ -140,6 +140,14 @@ public class FastByteWriter {
     }
 
     /**
+     * OPTIMIZED: Write short at a specific position (for backpatching length).
+     */
+    public final void setShort(int position, int value) {
+        buf[position] = (byte) (value >>> 8);
+        buf[position + 1] = (byte) value;
+    }
+
+    /**
      * ULTRA-OPTIMIZED: Write String directly with UTF-8 encoding.
      * Avoids intermediate byte array allocation.
      * Returns the number of bytes written (~40% faster than getBytes()).

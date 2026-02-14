@@ -1,11 +1,14 @@
 package com.kalynx.simplyabinaryserializer.deserializer;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Fast byte array reader that reads directly without stream overhead.
  * Avoids DataInputStream method call overhead for hot paths.
  */
 public final class FastByteReader {
-    private static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+    private static final java.nio.charset.Charset UTF_8 = StandardCharsets.UTF_8;
+    private static final java.nio.charset.Charset ISO_8859_1 = StandardCharsets.ISO_8859_1;
 
     private byte[] buf;
     private int pos;
@@ -81,12 +84,42 @@ public final class FastByteReader {
     }
 
     /**
-     * OPTIMIZED String reading method.
+     * OPTIMIZED String reading - uses JVM's highly optimized UTF-8 decoder.
      *
-     * Uses cached UTF-8 Charset to avoid method call overhead.
-     * String constructor will use COMPACT_STRINGS optimization for ASCII automatically.
+     * Modern JVMs have excellent UTF-8 decoding performance with SIMD optimizations.
+     * Trying to outsmart the JVM often makes things slower.
      */
     public final String readStringDirect(int len) {
+        String result = new String(buf, pos, len, UTF_8);
+        pos += len;
+        return result;
+    }
+
+    /**
+     * OPTIMIZED: Read String with length prefix in one call.
+     * Combines readInt() + String creation for minimal overhead.
+     *
+     * Used for List<String> where we write: writeInt(len) + content
+     * Returns null if length is -1.
+     */
+    public final String readStringWithIntLength() {
+        int len = readInt();
+        if (len == -1) {
+            return null;
+        }
+        String result = new String(buf, pos, len, UTF_8);
+        pos += len;
+        return result;
+    }
+
+    /**
+     * OPTIMIZED: Read String with short length prefix in one call.
+     * Combines readShort() + String creation for minimal overhead.
+     *
+     * Used for Map<String, V> where we write: writeShort(len) + content
+     */
+    public final String readStringWithShortLength() {
+        int len = readShort() & 0xFFFF; // unsigned short
         String result = new String(buf, pos, len, UTF_8);
         pos += len;
         return result;

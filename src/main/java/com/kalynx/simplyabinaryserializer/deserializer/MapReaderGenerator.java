@@ -174,15 +174,11 @@ public class MapReaderGenerator {
             cb.invokevirtual(CD_FastByteReader, "readLong", MTD_long);
             cb.invokestatic(ConstantDescs.CD_Long, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Long, ConstantDescs.CD_long));
         } else if (keyType == String.class) {
-            // ULTRA-OPTIMIZED: Use readStringDirect for minimal overhead
-            // reader is already on stack from line 168
-            // String key = reader.readStringDirect(reader.readShort());
-            cb.dup(); // duplicate reader reference for second call
-            cb.invokevirtual(CD_FastByteReader, "readShort", MTD_short);
-            // Now stack has: reader, short_value
-            // readStringDirect expects int, short is auto-widened
-            cb.invokevirtual(CD_FastByteReader, "readStringDirect",
-                    MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_int));
+            // ULTRA-OPTIMIZED: Read length + String in ONE call!
+            // String key = reader.readStringWithShortLength();
+            // This reads the short length AND constructs the String in a single method
+            cb.invokevirtual(CD_FastByteReader, "readStringWithShortLength",
+                    MethodTypeDesc.of(ConstantDescs.CD_String));
         } else if (keyType == double.class || keyType == Double.class) {
             cb.invokevirtual(CD_FastByteReader, "readDouble", MTD_double);
             cb.invokestatic(ConstantDescs.CD_Double, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Double, ConstantDescs.CD_double));
@@ -216,15 +212,10 @@ public class MapReaderGenerator {
             cb.invokevirtual(CD_FastByteReader, "readLong", MTD_long);
             cb.invokestatic(ConstantDescs.CD_Long, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Long, ConstantDescs.CD_long));
         } else if (valueType == String.class) {
-            // ULTRA-OPTIMIZED: Use readStringDirect for minimal overhead
-            // reader is already on stack from line 209
-            // String value = reader.readStringDirect(reader.readShort());
-            cb.dup(); // duplicate reader reference for second call
-            cb.invokevirtual(CD_FastByteReader, "readShort", MTD_short);
-            // Now stack has: reader, short_value
-            // readStringDirect expects int, short is auto-widened
-            cb.invokevirtual(CD_FastByteReader, "readStringDirect",
-                    MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_int));
+            // ULTRA-OPTIMIZED: Read length + String in ONE call!
+            // String value = reader.readStringWithShortLength();
+            cb.invokevirtual(CD_FastByteReader, "readStringWithShortLength",
+                    MethodTypeDesc.of(ConstantDescs.CD_String));
         } else if (valueType == double.class || valueType == Double.class) {
             cb.invokevirtual(CD_FastByteReader, "readDouble", MTD_double);
             cb.invokestatic(ConstantDescs.CD_Double, "valueOf", MethodTypeDesc.of(ConstantDescs.CD_Double, ConstantDescs.CD_double));

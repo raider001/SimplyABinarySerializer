@@ -157,50 +157,42 @@ public class MapWriterGenerator {
             cb.invokevirtual(ConstantDescs.CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
             cb.invokevirtual(CD_FastByteWriter, "writeLong", MTD_void_long);
         } else if (keyType == String.class) {
-            // ULTRA-OPTIMIZED: Direct UTF-8 encoding without intermediate byte array
-            // Stack: writer, key(String)
+            // ULTRA-OPTIMIZED: Direct UTF-8 encoding with length backpatching
+            // Stack at entry: [writer, Object(key)]
             cb.checkcast(ConstantDescs.CD_String);
-            cb.astore(5); // Store key temporarily
+            // Stack: [writer, String(key)]
+            cb.astore(8); // Store key in slot 8 (slot 5 has entry!)
+            // Stack: [writer]
 
             // int lengthPos = writer.getPosition();
-            cb.aload(1); // writer
+            // writer is already on stack!
             cb.invokevirtual(CD_FastByteWriter, "getPosition", MethodTypeDesc.of(ConstantDescs.CD_int));
-            cb.istore(6); // lengthPos
+            // Stack: [int]
+            cb.istore(9); // lengthPos in slot 9
+            // Stack: []
 
-            // writer.writeShort((short)0); // Placeholder for length
+            // writer.writeShort((short)0); // Placeholder
             cb.aload(1); // writer
             cb.iconst_0();
             cb.invokevirtual(CD_FastByteWriter, "writeShort", MTD_void_int);
+            // Stack: []
 
             // int bytesWritten = writer.writeStringUTF8Direct(key);
             cb.aload(1); // writer
-            cb.aload(5); // key
+            cb.aload(8); // key
             cb.invokevirtual(CD_FastByteWriter, "writeStringUTF8Direct",
                     MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_String));
-            cb.istore(7); // bytesWritten
+            // Stack: [int]
+            cb.istore(6); // bytesWritten in slot 6 (reuse)
+            // Stack: []
 
-            // Update length at the placeholder position
-            // buf[lengthPos] = (byte)(bytesWritten >>> 8);
-            // buf[lengthPos+1] = (byte)bytesWritten;
+            // writer.setShort(lengthPos, bytesWritten);
             cb.aload(1); // writer
-            cb.invokevirtual(CD_FastByteWriter, "getBuffer", MethodTypeDesc.of(CD_byte_array));
-            cb.astore(8); // buf
-
-            cb.aload(8); // buf
-            cb.iload(6); // lengthPos
-            cb.iload(7); // bytesWritten
-            cb.bipush(8);
-            cb.ishr(); // bytesWritten >>> 8
-            cb.i2b();
-            cb.bastore(); // buf[lengthPos] = high byte
-
-            cb.aload(8); // buf
-            cb.iload(6); // lengthPos
-            cb.iconst_1();
-            cb.iadd(); // lengthPos + 1
-            cb.iload(7); // bytesWritten
-            cb.i2b();
-            cb.bastore(); // buf[lengthPos+1] = low byte
+            cb.iload(9); // lengthPos
+            cb.iload(6); // bytesWritten
+            cb.invokevirtual(CD_FastByteWriter, "setShort",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int, ConstantDescs.CD_int));
+            // Stack: []
         } else if (keyType == double.class || keyType == Double.class) {
             cb.checkcast(ConstantDescs.CD_Double);
             cb.invokevirtual(ConstantDescs.CD_Double, "doubleValue", MethodTypeDesc.of(ConstantDescs.CD_double));
@@ -243,47 +235,42 @@ public class MapWriterGenerator {
             cb.invokevirtual(ConstantDescs.CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
             cb.invokevirtual(CD_FastByteWriter, "writeLong", MTD_void_long);
         } else if (valueType == String.class) {
-            // ULTRA-OPTIMIZED: Direct UTF-8 encoding without intermediate byte array
+            // ULTRA-OPTIMIZED: Direct UTF-8 encoding with length backpatching
+            // Stack at entry: [writer, Object(value)]
             cb.checkcast(ConstantDescs.CD_String);
-            cb.astore(6); // Store value temporarily
+            // Stack: [writer, String(value)]
+            cb.astore(10); // Store value in slot 10
+            // Stack: [writer]
 
             // int lengthPos = writer.getPosition();
-            cb.aload(1); // writer
+            // writer is already on stack!
             cb.invokevirtual(CD_FastByteWriter, "getPosition", MethodTypeDesc.of(ConstantDescs.CD_int));
-            cb.istore(7); // lengthPos
+            // Stack: [int]
+            cb.istore(11); // lengthPos in slot 11
+            // Stack: []
 
             // writer.writeShort((short)0); // Placeholder
             cb.aload(1); // writer
             cb.iconst_0();
             cb.invokevirtual(CD_FastByteWriter, "writeShort", MTD_void_int);
+            // Stack: []
 
             // int bytesWritten = writer.writeStringUTF8Direct(value);
             cb.aload(1); // writer
-            cb.aload(6); // value
+            cb.aload(10); // value
             cb.invokevirtual(CD_FastByteWriter, "writeStringUTF8Direct",
                     MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_String));
-            cb.istore(8); // bytesWritten
+            // Stack: [int]
+            cb.istore(12); // bytesWritten in slot 12
+            // Stack: []
 
-            // Update length at the placeholder position
+            // writer.setShort(lengthPos, bytesWritten);
             cb.aload(1); // writer
-            cb.invokevirtual(CD_FastByteWriter, "getBuffer", MethodTypeDesc.of(CD_byte_array));
-            cb.astore(9); // buf
-
-            cb.aload(9); // buf
-            cb.iload(7); // lengthPos
-            cb.iload(8); // bytesWritten
-            cb.bipush(8);
-            cb.ishr();
-            cb.i2b();
-            cb.bastore(); // buf[lengthPos] = high byte
-
-            cb.aload(9); // buf
-            cb.iload(7); // lengthPos
-            cb.iconst_1();
-            cb.iadd();
-            cb.iload(8); // bytesWritten
-            cb.i2b();
-            cb.bastore(); // buf[lengthPos+1] = low byte
+            cb.iload(11); // lengthPos
+            cb.iload(12); // bytesWritten
+            cb.invokevirtual(CD_FastByteWriter, "setShort",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int, ConstantDescs.CD_int));
+            // Stack: []
         } else if (valueType == double.class || valueType == Double.class) {
             cb.checkcast(ConstantDescs.CD_Double);
             cb.invokevirtual(ConstantDescs.CD_Double, "doubleValue", MethodTypeDesc.of(ConstantDescs.CD_double));

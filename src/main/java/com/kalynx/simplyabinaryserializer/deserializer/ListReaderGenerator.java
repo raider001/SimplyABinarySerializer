@@ -156,31 +156,16 @@ public class ListReaderGenerator {
 
     private <E> void generateElementRead(CodeBuilder cb, Class<E> elementType) {
         if (elementType == String.class) {
-            Label notNullLabel = cb.newLabel();
-            Label endLabel = cb.newLabel();
-
-            // int len = reader.readInt();
+            // ULTRA-OPTIMIZED: Read length + String in ONE call!
+            // String str = reader.readStringWithIntLength();
+            // This eliminates:
+            // - readInt() call
+            // - null check branching
+            // - readStringDirect() call
+            // All done in a single optimized method!
             cb.aload(1); // reader
-            cb.invokevirtual(CD_FastByteReader, "readInt", MTD_int);
-            cb.dup();
-            cb.istore(5); // len
-
-            // if (len == -1) return null;
-            cb.iconst_m1();
-            cb.if_icmpne(notNullLabel);
-            cb.aconst_null();
-            cb.goto_(endLabel);
-
-            cb.labelBinding(notNullLabel);
-
-            // ULTRA-OPTIMIZED: Minimize method calls by accessing reader fields directly via helper method
-            // String result = reader.readStringDirect(len);
-            cb.aload(1); // reader
-            cb.iload(5); // len
-            cb.invokevirtual(CD_FastByteReader, "readStringDirect",
-                    MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_int));
-
-            cb.labelBinding(endLabel);
+            cb.invokevirtual(CD_FastByteReader, "readStringWithIntLength",
+                    MethodTypeDesc.of(ConstantDescs.CD_String));
         } else {
             Label notNullLabel = cb.newLabel();
             Label endLabel = cb.newLabel();
