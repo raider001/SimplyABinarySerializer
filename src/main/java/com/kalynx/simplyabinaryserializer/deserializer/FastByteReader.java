@@ -78,6 +78,21 @@ public final class FastByteReader {
         return result;
     }
 
+    /**
+     * ULTRA-OPTIMIZED String reading method.
+     * Reads a String directly from the buffer without intermediate allocations.
+     * This is faster than calling getBuffer()/getPosition() separately.
+     *
+     * Uses StringCoding.decode which is JVM-optimized for UTF-8.
+     */
+    public final String readStringDirect(int len) {
+        // Use the fast String constructor that takes byte[], offset, length
+        // and uses COMPACT_STRINGS optimization internally
+        String result = new String(buf, pos, len, java.nio.charset.StandardCharsets.UTF_8);
+        pos += len;
+        return result;
+    }
+
     // Optimized method to read multiple integers at once - reduces method call overhead
     public final void readInts(int[] dest, int count) {
         for (int i = 0; i < count; i++) {
