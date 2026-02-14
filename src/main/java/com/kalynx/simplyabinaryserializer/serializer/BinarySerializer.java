@@ -27,6 +27,8 @@ public class BinarySerializer<T> implements Serializer<T> {
     private final FastByteWriter byteWriter;
     private final Field[] listFields;
     private final ListWriterGenerator.ListWriter[] listWriters;
+    private final Field[] arrayFields;
+    private final ArrayWriterGenerator.ArrayWriter[] arrayWriters;
     private final int estimatedSize;
 
     public BinarySerializer(Class<T> targetClass) throws Throwable {
@@ -47,15 +49,30 @@ public class BinarySerializer<T> implements Serializer<T> {
             this.listWriters[i] = listGenerator.generateListWriter(elementType);
         }
 
+        // Store array fields and generate bytecode array writers
+        this.arrayFields = analysis.arrayFields.toArray(new Field[0]);
+        this.arrayWriters = new ArrayWriterGenerator.ArrayWriter[arrayFields.length];
+
+        // Generate optimized array writers using bytecode (zero overhead!)
+        ArrayWriterGenerator arrayGenerator = new ArrayWriterGenerator();
+        for (int i = 0; i < arrayFields.length; i++) {
+            Class<?> componentType = analysis.arrayComponentTypes.get(i);
+            this.arrayWriters[i] = arrayGenerator.generateArrayWriter(componentType);
+        }
+
         // Generate optimized writer for primitive fields
         WriterGenerator generator = new WriterGenerator();
         if (analysis.primitiveFields.length > 0) {
             this.primitiveWriter = generator.generatePrimitiveWriter(targetClass, analysis.primitiveFields);
             int primitiveSize = generator.estimatePrimitiveSize(analysis.primitiveFields);
-            this.estimatedSize = primitiveSize + estimateListFieldsSize(analysis.listElementTypes);
+            int listSize = estimateListFieldsSize(analysis.listElementTypes);
+            int arraySize = estimateArrayFieldsSize(analysis.arrayComponentTypes);
+            this.estimatedSize = primitiveSize + listSize + arraySize;
         } else {
             this.primitiveWriter = null;
-            this.estimatedSize = estimateListFieldsSize(analysis.listElementTypes);
+            int listSize = estimateListFieldsSize(analysis.listElementTypes);
+            int arraySize = estimateArrayFieldsSize(analysis.arrayComponentTypes);
+            this.estimatedSize = listSize + arraySize;
         }
     }
 
@@ -63,6 +80,8 @@ public class BinarySerializer<T> implements Serializer<T> {
         Field[] primitiveFields;
         List<Field> listFields;
         List<Class<?>> listElementTypes;
+        List<Field> arrayFields;
+        List<Class<?>> arrayComponentTypes;
     }
 
     /**
@@ -73,6 +92,8 @@ public class BinarySerializer<T> implements Serializer<T> {
         List<Field> primitiveFields = new ArrayList<>();
         List<Field> listFields = new ArrayList<>();
         List<Class<?>> listElementTypes = new ArrayList<>();
+        List<Field> arrayFields = new ArrayList<>();
+        List<Class<?>> arrayComponentTypes = new ArrayList<>();
 
         for (Field field : clazz.getDeclaredFields()) {
             // Skip static and transient fields
@@ -85,6 +106,14 @@ public class BinarySerializer<T> implements Serializer<T> {
             // Check if primitive
             if (field.getType().isPrimitive()) {
                 primitiveFields.add(field);
+            }
+            // Check if array
+            else if (field.getType().isArray()) {
+                Class<?> componentType = field.getType().getComponentType();
+                if (componentType.isPrimitive()) {
+                    arrayFields.add(field);
+                    arrayComponentTypes.add(componentType);
+                }
             }
             // Check if List
             else if (List.class.isAssignableFrom(field.getType())) {
@@ -109,6 +138,8 @@ public class BinarySerializer<T> implements Serializer<T> {
         result.primitiveFields = primitiveFields.toArray(new Field[0]);
         result.listFields = listFields;
         result.listElementTypes = listElementTypes;
+        result.arrayFields = arrayFields;
+        result.arrayComponentTypes = arrayComponentTypes;
         return result;
     }
 
@@ -156,6 +187,44 @@ public class BinarySerializer<T> implements Serializer<T> {
         return size;
     }
 
+    private int estimateArrayFieldsSize(List<Class<?>> arrayComponentTypes) {
+        // Conservative estimate for array fields
+        int total = 0;
+        for (Class<?> componentType : arrayComponentTypes) {
+            total += estimateArraySize(componentType, 10); // Assume average of 10 elements
+        }
+        return total;
+    }
+
+    private static int estimateArraySize(Class<?> componentType, int estimatedLength) {
+        if (estimatedLength == 0) {
+            return 4; // length field only
+        }
+
+        int size = 4; // length field
+
+        // Estimate based on component type
+        if (componentType == int.class) {
+            size += estimatedLength * 4;
+        } else if (componentType == long.class) {
+            size += estimatedLength * 8;
+        } else if (componentType == double.class) {
+            size += estimatedLength * 8;
+        } else if (componentType == float.class) {
+            size += estimatedLength * 4;
+        } else if (componentType == short.class) {
+            size += estimatedLength * 2;
+        } else if (componentType == byte.class) {
+            size += estimatedLength * 1;
+        } else if (componentType == boolean.class) {
+            size += estimatedLength * 1;
+        } else if (componentType == char.class) {
+            size += estimatedLength * 2;
+        }
+
+        return size;
+    }
+
     /**
      * Serialize an object to bytes using generated bytecode for both primitives and lists.
      * ZERO conditionals - everything is direct bytecode calls.
@@ -187,6 +256,16 @@ public class BinarySerializer<T> implements Serializer<T> {
             listWriters[i].writeList(byteWriter, listValue);
         }
 
+        // Write array fields using generated bytecode (zero overhead, no conditionals!)
+        for (int i = 0; i < arrayFields.length; i++) {
+            Field field = arrayFields[i];
+            Object arrayValue = field.get(obj);
+
+            arrayWriters[i].writeArray(byteWriter, arrayValue);
+        }
+
         return byteWriter.toByteArray();
     }
 }
+
+

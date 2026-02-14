@@ -615,5 +615,164 @@ public class KalynxSerializerTest {
         assertEquals(1000, deserialized.values.size());
         assertEquals(values, deserialized.values);
     }
-}
 
+    // ========== Array Tests ==========
+
+    @Test
+    void roundTrip_intArray_preservesValues() throws Throwable {
+        KalynxSerializer<IntArrayObject> serializer = new KalynxSerializer<>(IntArrayObject.class);
+
+        IntArrayObject original = new IntArrayObject(new int[]{1, 2, 3, 4, 5});
+        byte[] bytes = serializer.serialize(original);
+        IntArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_longArray_preservesValues() throws Throwable {
+        KalynxSerializer<LongArrayObject> serializer = new KalynxSerializer<>(LongArrayObject.class);
+
+        LongArrayObject original = new LongArrayObject(new long[]{1L, 2L, 3L, Long.MAX_VALUE});
+        byte[] bytes = serializer.serialize(original);
+        LongArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_doubleArray_preservesValues() throws Throwable {
+        KalynxSerializer<DoubleArrayObject> serializer = new KalynxSerializer<>(DoubleArrayObject.class);
+
+        DoubleArrayObject original = new DoubleArrayObject(new double[]{1.1, 2.2, 3.3, Math.PI});
+        byte[] bytes = serializer.serialize(original);
+        DoubleArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values, 0.0001);
+    }
+
+    @Test
+    void roundTrip_floatArray_preservesValues() throws Throwable {
+        KalynxSerializer<FloatArrayObject> serializer = new KalynxSerializer<>(FloatArrayObject.class);
+
+        FloatArrayObject original = new FloatArrayObject(new float[]{1.1f, 2.2f, 3.3f, (float)Math.PI});
+        byte[] bytes = serializer.serialize(original);
+        FloatArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values, 0.0001f);
+    }
+
+    @Test
+    void roundTrip_shortArray_preservesValues() throws Throwable {
+        KalynxSerializer<ShortArrayObject> serializer = new KalynxSerializer<>(ShortArrayObject.class);
+
+        ShortArrayObject original = new ShortArrayObject(new short[]{1, 2, 3, Short.MAX_VALUE});
+        byte[] bytes = serializer.serialize(original);
+        ShortArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_byteArray_preservesValues() throws Throwable {
+        KalynxSerializer<ByteArrayObject> serializer = new KalynxSerializer<>(ByteArrayObject.class);
+
+        ByteArrayObject original = new ByteArrayObject(new byte[]{1, 2, 3, Byte.MAX_VALUE});
+        byte[] bytes = serializer.serialize(original);
+        ByteArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_booleanArray_preservesValues() throws Throwable {
+        KalynxSerializer<BooleanArrayObject> serializer = new KalynxSerializer<>(BooleanArrayObject.class);
+
+        BooleanArrayObject original = new BooleanArrayObject(new boolean[]{true, false, true, true, false});
+        byte[] bytes = serializer.serialize(original);
+        BooleanArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_charArray_preservesValues() throws Throwable {
+        KalynxSerializer<CharArrayObject> serializer = new KalynxSerializer<>(CharArrayObject.class);
+
+        CharArrayObject original = new CharArrayObject(new char[]{'a', 'b', 'c', 'Z'});
+        byte[] bytes = serializer.serialize(original);
+        CharArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertArrayEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_emptyArray_preservesEmpty() throws Throwable {
+        KalynxSerializer<IntArrayObject> serializer = new KalynxSerializer<>(IntArrayObject.class);
+
+        IntArrayObject original = new IntArrayObject(new int[]{});
+        byte[] bytes = serializer.serialize(original);
+        IntArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(0, deserialized.values.length);
+    }
+
+    @Test
+    void roundTrip_nullArray_preservesNull() throws Throwable {
+        KalynxSerializer<IntArrayObject> serializer = new KalynxSerializer<>(IntArrayObject.class);
+
+        IntArrayObject original = new IntArrayObject(null);
+        byte[] bytes = serializer.serialize(original);
+        IntArrayObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNull(deserialized.values);
+    }
+
+    @Test
+    void roundTrip_allPrimitiveArrays_preservesAllValues() throws Throwable {
+        KalynxSerializer<AllPrimitiveArraysObject> serializer = new KalynxSerializer<>(AllPrimitiveArraysObject.class);
+
+        AllPrimitiveArraysObject original = new AllPrimitiveArraysObject(
+            new int[]{1, 2, 3},
+            new long[]{4L, 5L, 6L},
+            new double[]{1.1, 2.2, 3.3},
+            new float[]{4.4f, 5.5f, 6.6f},
+            new short[]{7, 8, 9},
+            new byte[]{10, 11, 12},
+            new boolean[]{true, false, true},
+            new char[]{'x', 'y', 'z'}
+        );
+
+        byte[] bytes = serializer.serialize(original);
+        AllPrimitiveArraysObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertArrayEquals(original.intArray, deserialized.intArray);
+        assertArrayEquals(original.longArray, deserialized.longArray);
+        assertArrayEquals(original.doubleArray, deserialized.doubleArray, 0.0001);
+        assertArrayEquals(original.floatArray, deserialized.floatArray, 0.0001f);
+        assertArrayEquals(original.shortArray, deserialized.shortArray);
+        assertArrayEquals(original.byteArray, deserialized.byteArray);
+        assertArrayEquals(original.booleanArray, deserialized.booleanArray);
+        assertArrayEquals(original.charArray, deserialized.charArray);
+    }
+}

@@ -239,5 +239,80 @@ public class TestDataClasses {
             this.boolVal = boolVal;
         }
     }
-}
 
+    // Array test classes
+
+    public static class IntArrayObject {
+        public int[] values;
+        public IntArrayObject() {}
+        public IntArrayObject(int[] values) { this.values = values; }
+    }
+
+    public static class LongArrayObject {
+        public long[] values;
+        public LongArrayObject() {}
+        public LongArrayObject(long[] values) { this.values = values; }
+    }
+
+    public static class DoubleArrayObject {
+        public double[] values;
+        public DoubleArrayObject() {}
+        public DoubleArrayObject(double[] values) { this.values = values; }
+    }
+
+    public static class FloatArrayObject {
+        public float[] values;
+        public FloatArrayObject() {}
+        public FloatArrayObject(float[] values) { this.values = values; }
+    }
+
+    public static class ShortArrayObject {
+        public short[] values;
+        public ShortArrayObject() {}
+        public ShortArrayObject(short[] values) { this.values = values; }
+    }
+
+    public static class ByteArrayObject {
+        public byte[] values;
+        public ByteArrayObject() {}
+        public ByteArrayObject(byte[] values) { this.values = values; }
+    }
+
+    public static class BooleanArrayObject {
+        public boolean[] values;
+        public BooleanArrayObject() {}
+        public BooleanArrayObject(boolean[] values) { this.values = values; }
+    }
+
+    public static class CharArrayObject {
+        public char[] values;
+        public CharArrayObject() {}
+        public CharArrayObject(char[] values) { this.values = values; }
+    }
+
+    public static class AllPrimitiveArraysObject {
+        public int[] intArray;
+        public long[] longArray;
+        public double[] doubleArray;
+        public float[] floatArray;
+        public short[] shortArray;
+        public byte[] byteArray;
+        public boolean[] booleanArray;
+        public char[] charArray;
+
+        public AllPrimitiveArraysObject() {}
+
+        public AllPrimitiveArraysObject(int[] intArray, long[] longArray, double[] doubleArray,
+                                         float[] floatArray, short[] shortArray, byte[] byteArray,
+                                         boolean[] booleanArray, char[] charArray) {
+            this.intArray = intArray;
+            this.longArray = longArray;
+            this.doubleArray = doubleArray;
+            this.floatArray = floatArray;
+            this.shortArray = shortArray;
+            this.byteArray = byteArray;
+            this.booleanArray = booleanArray;
+            this.charArray = charArray;
+        }
+    }
+}

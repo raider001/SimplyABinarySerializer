@@ -234,8 +234,7 @@ public class ListReaderGenerator {
             } else if (elementType == Byte.class || elementType == byte.class) {
                 cb.aload(1); // reader
                 cb.invokevirtual(CD_FastByteReader, "readByte", MTD_byte);
-                cb.invokestatic(CD_Byte, "valueOf",
-                        MethodTypeDesc.of(CD_Byte, ConstantDescs.CD_byte));
+                cb.invokestatic(CD_Byte, "valueOf", MethodTypeDesc.of(CD_Byte, ConstantDescs.CD_byte));
             } else if (elementType == Boolean.class || elementType == boolean.class) {
                 cb.aload(1); // reader
                 cb.invokevirtual(CD_FastByteReader, "readBoolean", MTD_boolean);
