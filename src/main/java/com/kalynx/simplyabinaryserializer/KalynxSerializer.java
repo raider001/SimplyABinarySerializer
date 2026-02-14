@@ -9,7 +9,7 @@ import com.kalynx.simplyabinaryserializer.serializer.BinarySerializer;
  *
  * @param <T> The type this serializer handles
  */
-public class KalynxSerializer<T> implements Serializer, Deserializer {
+public class KalynxSerializer<T> implements OldSerializer, Deserializer {
 
     private final BinarySerializer<T> serializer;
     private final BinaryDeserializer<T> deserializer;

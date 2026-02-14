@@ -1,7 +1,6 @@
 package com.kalynx.simplyabinaryserializer;
 
 import java.lang.classfile.*;
-import java.lang.classfile.attribute.SourceFileAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
@@ -16,7 +15,6 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
@@ -30,7 +28,7 @@ import static com.kalynx.simplyabinaryserializer.TypeMarkers.*;
  *
  * @param <T> The type this serializer handles
  */
-public class OptimizedSerializer<T> implements Serializer, Deserializer {
+public class OptimizedSerializer<T> implements OldSerializer, Deserializer {
 
     private static final AtomicLong CLASS_COUNTER = new AtomicLong(0);
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();

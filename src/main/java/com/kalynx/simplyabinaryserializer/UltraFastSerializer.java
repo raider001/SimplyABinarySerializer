@@ -22,7 +22,7 @@ import java.util.*;
  *
  * @param <T> The type to serialize
  */
-public class UltraFastSerializer<T> implements Serializer, Deserializer {
+public class UltraFastSerializer<T> implements OldSerializer, Deserializer {
 
     private static final Unsafe UNSAFE;
     private static final long BYTE_ARRAY_BASE_OFFSET;

@@ -1,6 +1,6 @@
 package com.kalynx.simplyabinaryserializer.serializer;
 
-import com.kalynx.simplyabinaryserializer.Serializer;
+import com.kalynx.simplyabinaryserializer.OldSerializer;
 
 /**
  * Binary serialization controller - handles ONLY write operations.
@@ -13,7 +13,7 @@ import com.kalynx.simplyabinaryserializer.Serializer;
  *
  * @param <T> The type this serializer handles
  */
-public class BinarySerializer<T> implements Serializer {
+public class BinarySerializer<T> implements OldSerializer {
 
     private final Class<T> targetClass;
 
@@ -29,11 +29,10 @@ public class BinarySerializer<T> implements Serializer {
      * Serialize an object to bytes.
      *
      * @param obj The object to serialize
-     * @param type The type to serialize as
      * @return Serialized byte array
      * @throws Throwable if serialization fails
      */
-    public <R> byte[] serialize(R obj, Class<R> type) throws Throwable {
+    public byte[] serialize(T obj) throws Throwable {
         // TODO: Implement serialization logic
         // - Get pooled FastByteWriter
         // - Invoke generated writer
