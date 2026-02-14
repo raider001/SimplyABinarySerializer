@@ -18,7 +18,6 @@ public class SerializerConstants {
 
     public static final ClassDesc CD_FastByteWriter = ClassDesc.of("com.kalynx.simplyabinaryserializer.serializer.FastByteWriter");
     public static final ClassDesc CD_FastByteReader = ClassDesc.of("com.kalynx.simplyabinaryserializer.deserializer.FastByteReader");
-    public static final ClassDesc CD_OptimizedSerializer = ClassDesc.of("com.kalynx.simplyabinaryserializer.OptimizedSerializer");
     public static final ClassDesc CD_Object = ConstantDescs.CD_Object;
     public static final ClassDesc CD_String = ConstantDescs.CD_String;
     public static final ClassDesc CD_List = ClassDesc.of("java.util.List");

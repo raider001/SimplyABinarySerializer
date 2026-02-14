@@ -444,4 +444,60 @@ public class TestDataClasses {
             this.level2 = level2;
         }
     }
+
+    // Large string test classes for benchmarking string performance with longer text
+
+    public static class LargeStringObject {
+        public String content;
+
+        public LargeStringObject() {}
+
+        public LargeStringObject(String content) {
+            this.content = content;
+        }
+    }
+
+    public static class LargeStringListObject {
+        public List<String> strings;
+
+        public LargeStringListObject() {}
+
+        public LargeStringListObject(List<String> strings) {
+            this.strings = strings;
+        }
+    }
+
+    public static class MixedSizeStringListObject {
+        public List<String> shortStrings;
+        public List<String> mediumStrings;
+        public List<String> longStrings;
+
+        public MixedSizeStringListObject() {}
+
+        public MixedSizeStringListObject(List<String> shortStrings, List<String> mediumStrings, List<String> longStrings) {
+            this.shortStrings = shortStrings;
+            this.mediumStrings = mediumStrings;
+            this.longStrings = longStrings;
+        }
+    }
+
+    public static class DocumentObject {
+        public String title;
+        public String author;
+        public String summary;
+        public String content;
+        public List<String> tags;
+        public long timestamp;
+
+        public DocumentObject() {}
+
+        public DocumentObject(String title, String author, String summary, String content, List<String> tags, long timestamp) {
+            this.title = title;
+            this.author = author;
+            this.summary = summary;
+            this.content = content;
+            this.tags = tags;
+            this.timestamp = timestamp;
+        }
+    }
 }

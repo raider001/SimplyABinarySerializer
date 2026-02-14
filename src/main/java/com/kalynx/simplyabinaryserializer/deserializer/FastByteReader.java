@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
  */
 public final class FastByteReader {
     private static final java.nio.charset.Charset UTF_8 = StandardCharsets.UTF_8;
-    private static final java.nio.charset.Charset ISO_8859_1 = StandardCharsets.ISO_8859_1;
 
     private byte[] buf;
     private int pos;

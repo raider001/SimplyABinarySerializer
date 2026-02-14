@@ -49,6 +49,10 @@ public class KalynxBenchmarkRunnerTests {
     private static final String SIMPLE_NESTED = "SimpleNestedObject";
     private static final String RECTANGLE = "Rectangle";
     private static final String DEEP_NESTED = "DeepNestedLevel1";
+    private static final String LARGE_STRING = "LargeStringObject";
+    private static final String LARGE_STRING_LIST = "LargeStringListObject";
+    private static final String MIXED_SIZE_STRING_LIST = "MixedSizeStringListObject";
+    private static final String DOCUMENT = "DocumentObject";
 
     private static final String[] LIBRARIES = {KALYNX_SERIALIZER, KRYO, FURY};
     private static final String[] OBJECT_TYPES = {
@@ -69,7 +73,11 @@ public class KalynxBenchmarkRunnerTests {
         ALL_PRIMITIVE_ARRAYS,
         SIMPLE_NESTED,
         RECTANGLE,
-        DEEP_NESTED
+        DEEP_NESTED,
+        LARGE_STRING,
+        LARGE_STRING_LIST,
+        MIXED_SIZE_STRING_LIST,
+        DOCUMENT
     };
 
     private static BenchmarkResultManager resultManager;
@@ -93,6 +101,10 @@ public class KalynxBenchmarkRunnerTests {
     private KalynxSerializer<SimpleNestedObject> kalynxSimpleNested;
     private KalynxSerializer<Rectangle> kalynxRectangle;
     private KalynxSerializer<DeepNestedLevel1> kalynxDeepNested;
+    private KalynxSerializer<LargeStringObject> kalynxLargeString;
+    private KalynxSerializer<LargeStringListObject> kalynxLargeStringList;
+    private KalynxSerializer<MixedSizeStringListObject> kalynxMixedSizeStringList;
+    private KalynxSerializer<DocumentObject> kalynxDocument;
 
     // Kryo and Fury
     private ThreadLocal<Kryo> kryoThreadLocal;
@@ -177,6 +189,10 @@ public class KalynxBenchmarkRunnerTests {
         kalynxSimpleNested = new KalynxSerializer<>(SimpleNestedObject.class);
         kalynxRectangle = new KalynxSerializer<>(Rectangle.class);
         kalynxDeepNested = new KalynxSerializer<>(DeepNestedLevel1.class);
+        kalynxLargeString = new KalynxSerializer<>(LargeStringObject.class);
+        kalynxLargeStringList = new KalynxSerializer<>(LargeStringListObject.class);
+        kalynxMixedSizeStringList = new KalynxSerializer<>(MixedSizeStringListObject.class);
+        kalynxDocument = new KalynxSerializer<>(DocumentObject.class);
 
         // Initialize Kryo
         kryoThreadLocal = ThreadLocal.withInitial(() -> {
@@ -351,6 +367,97 @@ public class KalynxBenchmarkRunnerTests {
         DeepNestedLevel3 level3 = new DeepNestedLevel3(seed * 300);
         DeepNestedLevel2 level2 = new DeepNestedLevel2(seed * 200, level3);
         return new DeepNestedLevel1(seed * 100, level2);
+    }
+
+    // Large string object creation methods
+
+    private static LargeStringObject createLargeStringObject(int seed) {
+        String content = generateLargeString(150, seed);
+        return new LargeStringObject(content);
+    }
+
+    private static LargeStringListObject createLargeStringListObject(int seed) {
+        List<String> strings = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            strings.add(generateLargeString(120 + i * 20, seed + i));
+        }
+        return new LargeStringListObject(strings);
+    }
+
+    private static MixedSizeStringListObject createMixedSizeStringListObject(int seed) {
+        List<String> shortStrings = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            shortStrings.add("Short_" + seed + "_" + i);
+        }
+
+        List<String> mediumStrings = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            mediumStrings.add(generateLargeString(50, seed + i));
+        }
+
+        List<String> longStrings = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            longStrings.add(generateLargeString(200, seed + i));
+        }
+
+        return new MixedSizeStringListObject(shortStrings, mediumStrings, longStrings);
+    }
+
+    private static DocumentObject createDocumentObject(int seed) {
+        String title = "Document Title " + seed + " - Performance Analysis Report";
+        String author = "Author Name " + seed;
+        String summary = generateRealisticText(150, seed);
+        String content = generateRealisticText(500, seed + 100);
+
+        List<String> tags = new ArrayList<>();
+        tags.add("performance");
+        tags.add("benchmark");
+        tags.add("serialization");
+        tags.add("tag_" + seed);
+
+        return new DocumentObject(title, author, summary, content, tags, System.currentTimeMillis() + seed);
+    }
+
+    // Helper methods for generating large strings
+
+    private static String generateLargeString(int length, int seed) {
+        StringBuilder sb = new StringBuilder(length);
+        String base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ";
+
+        for (int i = 0; i < length; i++) {
+            int index = (seed + i) % base.length();
+            sb.append(base.charAt(index));
+        }
+
+        return sb.toString();
+    }
+
+    private static String generateRealisticText(int approximateLength, int seed) {
+        String[] sentences = {
+            "The quick brown fox jumps over the lazy dog in the middle of a sunny afternoon.",
+            "Performance optimization is crucial for building scalable distributed systems.",
+            "Machine learning algorithms require extensive training data to achieve accuracy.",
+            "Database indexing significantly improves query performance for large datasets.",
+            "Microservices architecture enables independent deployment and scaling of components.",
+            "Cloud computing provides elastic infrastructure for modern applications.",
+            "Security best practices include encryption, authentication, and authorization.",
+            "Continuous integration and deployment pipelines automate software delivery.",
+            "Modern web applications leverage reactive programming for better responsiveness.",
+            "Distributed systems face challenges with consistency, availability, and partition tolerance."
+        };
+
+        StringBuilder sb = new StringBuilder(approximateLength);
+        int sentenceIndex = seed;
+
+        while (sb.length() < approximateLength) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(sentences[sentenceIndex % sentences.length]);
+            sentenceIndex++;
+        }
+
+        return sb.substring(0, Math.min(approximateLength, sb.length()));
     }
 
     // ========== KalynxSerializer Benchmark Tests ==========
@@ -605,6 +712,62 @@ public class KalynxBenchmarkRunnerTests {
         BenchmarkResultManager.SerializationResult result = benchmarkKalynxSerializer(kalynxDeepNested, objects, BENCHMARK_ITERATIONS);
         resultManager.recordResult(KALYNX_SERIALIZER, DEEP_NESTED, result);
         resultManager.printResult(KALYNX_SERIALIZER, DEEP_NESTED, result);
+    }
+
+    @Test
+    public void benchmarkKalynxSerializer_LargeStringObject() throws Throwable {
+        System.out.println("\n=== KalynxSerializer - LargeStringObject (150 chars) ===");
+
+        LargeStringObject[] objects = new LargeStringObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKalynxSerializer(kalynxLargeString, objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KALYNX_SERIALIZER, LARGE_STRING, result);
+        resultManager.printResult(KALYNX_SERIALIZER, LARGE_STRING, result);
+    }
+
+    @Test
+    public void benchmarkKalynxSerializer_LargeStringListObject() throws Throwable {
+        System.out.println("\n=== KalynxSerializer - LargeStringListObject (5 strings, 120-200 chars each) ===");
+
+        LargeStringListObject[] objects = new LargeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKalynxSerializer(kalynxLargeStringList, objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KALYNX_SERIALIZER, LARGE_STRING_LIST, result);
+        resultManager.printResult(KALYNX_SERIALIZER, LARGE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkKalynxSerializer_MixedSizeStringListObject() throws Throwable {
+        System.out.println("\n=== KalynxSerializer - MixedSizeStringListObject (short/medium/long strings) ===");
+
+        MixedSizeStringListObject[] objects = new MixedSizeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createMixedSizeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKalynxSerializer(kalynxMixedSizeStringList, objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KALYNX_SERIALIZER, MIXED_SIZE_STRING_LIST, result);
+        resultManager.printResult(KALYNX_SERIALIZER, MIXED_SIZE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkKalynxSerializer_DocumentObject() throws Throwable {
+        System.out.println("\n=== KalynxSerializer - DocumentObject (realistic document with 500+ char content) ===");
+
+        DocumentObject[] objects = new DocumentObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createDocumentObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKalynxSerializer(kalynxDocument, objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KALYNX_SERIALIZER, DOCUMENT, result);
+        resultManager.printResult(KALYNX_SERIALIZER, DOCUMENT, result);
     }
 
 
@@ -862,6 +1025,62 @@ public class KalynxBenchmarkRunnerTests {
         resultManager.printResult(KRYO, DEEP_NESTED, result);
     }
 
+    @Test
+    public void benchmarkKryo_LargeStringObject() throws Throwable {
+        System.out.println("\n=== Kryo - LargeStringObject ===");
+
+        LargeStringObject[] objects = new LargeStringObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, LargeStringObject.class, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KRYO, LARGE_STRING, result);
+        resultManager.printResult(KRYO, LARGE_STRING, result);
+    }
+
+    @Test
+    public void benchmarkKryo_LargeStringListObject() throws Throwable {
+        System.out.println("\n=== Kryo - LargeStringListObject ===");
+
+        LargeStringListObject[] objects = new LargeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, LargeStringListObject.class, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KRYO, LARGE_STRING_LIST, result);
+        resultManager.printResult(KRYO, LARGE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkKryo_MixedSizeStringListObject() throws Throwable {
+        System.out.println("\n=== Kryo - MixedSizeStringListObject ===");
+
+        MixedSizeStringListObject[] objects = new MixedSizeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createMixedSizeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, MixedSizeStringListObject.class, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KRYO, MIXED_SIZE_STRING_LIST, result);
+        resultManager.printResult(KRYO, MIXED_SIZE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkKryo_DocumentObject() throws Throwable {
+        System.out.println("\n=== Kryo - DocumentObject ===");
+
+        DocumentObject[] objects = new DocumentObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createDocumentObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkKryo(objects, DocumentObject.class, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(KRYO, DOCUMENT, result);
+        resultManager.printResult(KRYO, DOCUMENT, result);
+    }
+
     // ========== Fury Benchmark Tests ==========
 
     @Test
@@ -1114,6 +1333,62 @@ public class KalynxBenchmarkRunnerTests {
         BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, BENCHMARK_ITERATIONS);
         resultManager.recordResult(FURY, DEEP_NESTED, result);
         resultManager.printResult(FURY, DEEP_NESTED, result);
+    }
+
+    @Test
+    public void benchmarkFury_LargeStringObject() throws Throwable {
+        System.out.println("\n=== Fury - LargeStringObject ===");
+
+        LargeStringObject[] objects = new LargeStringObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(FURY, LARGE_STRING, result);
+        resultManager.printResult(FURY, LARGE_STRING, result);
+    }
+
+    @Test
+    public void benchmarkFury_LargeStringListObject() throws Throwable {
+        System.out.println("\n=== Fury - LargeStringListObject ===");
+
+        LargeStringListObject[] objects = new LargeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createLargeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(FURY, LARGE_STRING_LIST, result);
+        resultManager.printResult(FURY, LARGE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkFury_MixedSizeStringListObject() throws Throwable {
+        System.out.println("\n=== Fury - MixedSizeStringListObject ===");
+
+        MixedSizeStringListObject[] objects = new MixedSizeStringListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createMixedSizeStringListObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(FURY, MIXED_SIZE_STRING_LIST, result);
+        resultManager.printResult(FURY, MIXED_SIZE_STRING_LIST, result);
+    }
+
+    @Test
+    public void benchmarkFury_DocumentObject() throws Throwable {
+        System.out.println("\n=== Fury - DocumentObject ===");
+
+        DocumentObject[] objects = new DocumentObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = createDocumentObject(i);
+        }
+
+        BenchmarkResultManager.SerializationResult result = benchmarkFury(objects, BENCHMARK_ITERATIONS);
+        resultManager.recordResult(FURY, DOCUMENT, result);
+        resultManager.printResult(FURY, DOCUMENT, result);
     }
 
     // ========== Benchmark Helper Methods ==========
