@@ -3,6 +3,10 @@ package com.kalynx.simplyabinaryserializer;
 import com.kalynx.simplyabinaryserializer.testutil.TestDataClasses.*;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -415,6 +419,201 @@ public class KalynxSerializerTest {
         assertEquals(100, result1.value);
         assertEquals(200, result2.value);
         assertEquals(300, result3.value);
+    }
+
+    // ========== List Serialization Tests ==========
+
+    @Test
+    void roundTrip_integerList_preservesValues() throws Throwable {
+        KalynxSerializer<IntegerListObject> serializer = new KalynxSerializer<>(IntegerListObject.class);
+
+        List<Integer> values = Arrays.asList(1, 2, 3, 4, 5);
+        IntegerListObject original = new IntegerListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(5, deserialized.values.size());
+        assertEquals(values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_integerList_withNulls_preservesValues() throws Throwable {
+        KalynxSerializer<IntegerListObject> serializer = new KalynxSerializer<>(IntegerListObject.class);
+
+        List<Integer> values = Arrays.asList(1, null, 3, null, 5);
+        IntegerListObject original = new IntegerListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(5, deserialized.values.size());
+        assertEquals(Integer.valueOf(1), deserialized.values.get(0));
+        assertNull(deserialized.values.get(1));
+        assertEquals(Integer.valueOf(3), deserialized.values.get(2));
+        assertNull(deserialized.values.get(3));
+        assertEquals(Integer.valueOf(5), deserialized.values.get(4));
+    }
+
+    @Test
+    void roundTrip_emptyIntegerList_preservesEmpty() throws Throwable {
+        KalynxSerializer<IntegerListObject> serializer = new KalynxSerializer<>(IntegerListObject.class);
+
+        IntegerListObject original = new IntegerListObject(new ArrayList<>());
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(0, deserialized.values.size());
+    }
+
+    @Test
+    void roundTrip_nullIntegerList_preservesNull() throws Throwable {
+        KalynxSerializer<IntegerListObject> serializer = new KalynxSerializer<>(IntegerListObject.class);
+
+        IntegerListObject original = new IntegerListObject(null);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNull(deserialized.values);
+    }
+
+    @Test
+    void roundTrip_stringList_preservesValues() throws Throwable {
+        KalynxSerializer<StringListObject> serializer = new KalynxSerializer<>(StringListObject.class);
+
+        List<String> strings = Arrays.asList("hello", "world", "test", "serialization");
+        StringListObject original = new StringListObject(strings);
+
+        byte[] bytes = serializer.serialize(original);
+        StringListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.strings);
+        assertEquals(4, deserialized.strings.size());
+        assertEquals(strings, deserialized.strings);
+    }
+
+    @Test
+    void roundTrip_stringList_withNullsAndEmptyStrings_preservesValues() throws Throwable {
+        KalynxSerializer<StringListObject> serializer = new KalynxSerializer<>(StringListObject.class);
+
+        List<String> strings = Arrays.asList("hello", null, "", "world");
+        StringListObject original = new StringListObject(strings);
+
+        byte[] bytes = serializer.serialize(original);
+        StringListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.strings);
+        assertEquals(4, deserialized.strings.size());
+        assertEquals("hello", deserialized.strings.get(0));
+        assertNull(deserialized.strings.get(1));
+        assertEquals("", deserialized.strings.get(2));
+        assertEquals("world", deserialized.strings.get(3));
+    }
+
+    @Test
+    void roundTrip_longList_preservesValues() throws Throwable {
+        KalynxSerializer<LongListObject> serializer = new KalynxSerializer<>(LongListObject.class);
+
+        List<Long> values = Arrays.asList(1L, 1000L, 1000000L, Long.MAX_VALUE, Long.MIN_VALUE);
+        LongListObject original = new LongListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        LongListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(5, deserialized.values.size());
+        assertEquals(values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_doubleList_preservesValues() throws Throwable {
+        KalynxSerializer<DoubleListObject> serializer = new KalynxSerializer<>(DoubleListObject.class);
+
+        List<Double> values = Arrays.asList(1.0, 2.5, 3.14159, Double.MAX_VALUE, Double.MIN_VALUE);
+        DoubleListObject original = new DoubleListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        DoubleListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(5, deserialized.values.size());
+        for (int i = 0; i < values.size(); i++) {
+            assertEquals(values.get(i), deserialized.values.get(i), 0.0);
+        }
+    }
+
+    @Test
+    void roundTrip_mixedPrimitiveAndList_preservesAllValues() throws Throwable {
+        KalynxSerializer<MixedPrimitiveAndListObject> serializer = new KalynxSerializer<>(MixedPrimitiveAndListObject.class);
+
+        List<Integer> intList = Arrays.asList(10, 20, 30);
+        MixedPrimitiveAndListObject original = new MixedPrimitiveAndListObject(42, intList);
+
+        byte[] bytes = serializer.serialize(original);
+        MixedPrimitiveAndListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(42, deserialized.intValue);
+        assertNotNull(deserialized.intList);
+        assertEquals(3, deserialized.intList.size());
+        assertEquals(intList, deserialized.intList);
+    }
+
+    @Test
+    void roundTrip_allPrimitivesWithLists_preservesAllValues() throws Throwable {
+        KalynxSerializer<AllPrimitivesWithListsObject> serializer = new KalynxSerializer<>(AllPrimitivesWithListsObject.class);
+
+        List<Integer> intList = Arrays.asList(1, 2, 3);
+        List<String> stringList = Arrays.asList("a", "b", "c");
+        AllPrimitivesWithListsObject original = new AllPrimitivesWithListsObject(
+            (byte) 99,
+            intList,
+            123456789L,
+            stringList,
+            true
+        );
+
+        byte[] bytes = serializer.serialize(original);
+        AllPrimitivesWithListsObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(99, deserialized.byteVal);
+        assertEquals(intList, deserialized.intList);
+        assertEquals(123456789L, deserialized.longVal);
+        assertEquals(stringList, deserialized.stringList);
+        assertTrue(deserialized.boolVal);
+    }
+
+    @Test
+    void roundTrip_largeIntegerList_preservesValues() throws Throwable {
+        KalynxSerializer<IntegerListObject> serializer = new KalynxSerializer<>(IntegerListObject.class);
+
+        List<Integer> values = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            values.add(i);
+        }
+        IntegerListObject original = new IntegerListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(1000, deserialized.values.size());
+        assertEquals(values, deserialized.values);
     }
 }
 
