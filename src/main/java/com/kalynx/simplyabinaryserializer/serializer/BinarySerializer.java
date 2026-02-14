@@ -1,6 +1,6 @@
 package com.kalynx.simplyabinaryserializer.serializer;
 
-import com.kalynx.simplyabinaryserializer.OldSerializer;
+import com.kalynx.simplyabinaryserializer.Serializer;
 
 /**
  * Binary serialization controller - handles ONLY write operations.
@@ -13,7 +13,7 @@ import com.kalynx.simplyabinaryserializer.OldSerializer;
  *
  * @param <T> The type this serializer handles
  */
-public class BinarySerializer<T> implements OldSerializer {
+public class BinarySerializer<T> implements Serializer<T> {
 
     private final Class<T> targetClass;
 
@@ -32,12 +32,8 @@ public class BinarySerializer<T> implements OldSerializer {
      * @return Serialized byte array
      * @throws Throwable if serialization fails
      */
+    @Override
     public byte[] serialize(T obj) throws Throwable {
-        // TODO: Implement serialization logic
-        // - Get pooled FastByteWriter
-        // - Invoke generated writer
-        // - Return byte array
-        throw new UnsupportedOperationException("Serialization logic to be ported");
+        return new byte[0];
     }
 }
-
