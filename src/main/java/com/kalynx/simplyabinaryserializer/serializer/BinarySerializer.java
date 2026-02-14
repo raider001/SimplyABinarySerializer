@@ -8,15 +8,16 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Binary serialization controller - handles write operations for primitives and lists.
+ * Binary serialization controller - handles write operations for primitives, lists, arrays, and maps.
  *
  * Design philosophy:
  * - One-way operation: Object → bytes
  * - No references to deserializer classes
  * - Optimized for write performance
- * - Supports primitives and List fields
+ * - Supports primitives, List fields, primitive arrays, and Maps
  *
  * @param <T> The type this serializer handles
  */
@@ -29,6 +30,11 @@ public class BinarySerializer<T> implements Serializer<T> {
     private final ListWriterGenerator.ListWriter[] listWriters;
     private final Field[] arrayFields;
     private final ArrayWriterGenerator.ArrayWriter[] arrayWriters;
+    private final Field[] mapFields;
+    private final MapWriterGenerator.MapWriter[] mapWriters;
+    private final Field[] objectFields;
+    private final ObjectWriterGenerator.ObjectWriter[] objectWriters;
+    private final BinarySerializer<?>[] nestedSerializers;
     private final int estimatedSize;
 
     public BinarySerializer(Class<T> targetClass) throws Throwable {
@@ -60,6 +66,31 @@ public class BinarySerializer<T> implements Serializer<T> {
             this.arrayWriters[i] = arrayGenerator.generateArrayWriter(componentType);
         }
 
+        // Store map fields and generate bytecode map writers
+        this.mapFields = analysis.mapFields.toArray(new Field[0]);
+        this.mapWriters = new MapWriterGenerator.MapWriter[mapFields.length];
+
+        // Generate optimized map writers using bytecode (zero overhead!)
+        MapWriterGenerator mapGenerator = new MapWriterGenerator();
+        for (int i = 0; i < mapFields.length; i++) {
+            Class<?> keyType = analysis.mapKeyTypes.get(i);
+            Class<?> valueType = analysis.mapValueTypes.get(i);
+            this.mapWriters[i] = mapGenerator.generateMapWriter(keyType, valueType);
+        }
+
+        // Store object fields and generate bytecode object writers
+        this.objectFields = analysis.objectFields.toArray(new Field[0]);
+        this.objectWriters = new ObjectWriterGenerator.ObjectWriter[objectFields.length];
+        this.nestedSerializers = new BinarySerializer<?>[objectFields.length];
+
+        // Generate optimized object writers using bytecode (zero overhead!)
+        ObjectWriterGenerator objectGenerator = new ObjectWriterGenerator();
+        for (int i = 0; i < objectFields.length; i++) {
+            Class<?> objectType = analysis.objectTypes.get(i);
+            this.objectWriters[i] = objectGenerator.generateObjectWriter(objectType);
+            this.nestedSerializers[i] = new BinarySerializer<>(objectType);
+        }
+
         // Generate optimized writer for primitive fields
         WriterGenerator generator = new WriterGenerator();
         if (analysis.primitiveFields.length > 0) {
@@ -67,12 +98,16 @@ public class BinarySerializer<T> implements Serializer<T> {
             int primitiveSize = generator.estimatePrimitiveSize(analysis.primitiveFields);
             int listSize = estimateListFieldsSize(analysis.listElementTypes);
             int arraySize = estimateArrayFieldsSize(analysis.arrayComponentTypes);
-            this.estimatedSize = primitiveSize + listSize + arraySize;
+            int mapSize = estimateMapFieldsSize(analysis.mapKeyTypes, analysis.mapValueTypes);
+            int objectSize = estimateObjectFieldsSize(analysis.objectTypes);
+            this.estimatedSize = primitiveSize + listSize + arraySize + mapSize + objectSize;
         } else {
             this.primitiveWriter = null;
             int listSize = estimateListFieldsSize(analysis.listElementTypes);
             int arraySize = estimateArrayFieldsSize(analysis.arrayComponentTypes);
-            this.estimatedSize = listSize + arraySize;
+            int mapSize = estimateMapFieldsSize(analysis.mapKeyTypes, analysis.mapValueTypes);
+            int objectSize = estimateObjectFieldsSize(analysis.objectTypes);
+            this.estimatedSize = listSize + arraySize + mapSize + objectSize;
         }
     }
 
@@ -82,6 +117,11 @@ public class BinarySerializer<T> implements Serializer<T> {
         List<Class<?>> listElementTypes;
         List<Field> arrayFields;
         List<Class<?>> arrayComponentTypes;
+        List<Field> mapFields;
+        List<Class<?>> mapKeyTypes;
+        List<Class<?>> mapValueTypes;
+        List<Field> objectFields;
+        List<Class<?>> objectTypes;
     }
 
     /**
@@ -94,6 +134,11 @@ public class BinarySerializer<T> implements Serializer<T> {
         List<Class<?>> listElementTypes = new ArrayList<>();
         List<Field> arrayFields = new ArrayList<>();
         List<Class<?>> arrayComponentTypes = new ArrayList<>();
+        List<Field> mapFields = new ArrayList<>();
+        List<Class<?>> mapKeyTypes = new ArrayList<>();
+        List<Class<?>> mapValueTypes = new ArrayList<>();
+        List<Field> objectFields = new ArrayList<>();
+        List<Class<?>> objectTypes = new ArrayList<>();
 
         for (Field field : clazz.getDeclaredFields()) {
             // Skip static and transient fields
@@ -115,6 +160,29 @@ public class BinarySerializer<T> implements Serializer<T> {
                     arrayComponentTypes.add(componentType);
                 }
             }
+            // Check if Map
+            else if (Map.class.isAssignableFrom(field.getType())) {
+                mapFields.add(field);
+
+                // Extract generic types for key and value
+                Type genericType = field.getGenericType();
+                if (genericType instanceof ParameterizedType) {
+                    ParameterizedType paramType = (ParameterizedType) genericType;
+                    Type[] typeArgs = paramType.getActualTypeArguments();
+                    if (typeArgs.length >= 2) {
+                        Class<?> keyType = (typeArgs[0] instanceof Class) ? (Class<?>) typeArgs[0] : Object.class;
+                        Class<?> valueType = (typeArgs[1] instanceof Class) ? (Class<?>) typeArgs[1] : Object.class;
+                        mapKeyTypes.add(keyType);
+                        mapValueTypes.add(valueType);
+                    } else {
+                        mapKeyTypes.add(Object.class);
+                        mapValueTypes.add(Object.class);
+                    }
+                } else {
+                    mapKeyTypes.add(Object.class);
+                    mapValueTypes.add(Object.class);
+                }
+            }
             // Check if List
             else if (List.class.isAssignableFrom(field.getType())) {
                 listFields.add(field);
@@ -133,6 +201,11 @@ public class BinarySerializer<T> implements Serializer<T> {
                     listElementTypes.add(Object.class);
                 }
             }
+            // Otherwise it's a nested object field
+            else {
+                objectFields.add(field);
+                objectTypes.add(field.getType());
+            }
         }
 
         result.primitiveFields = primitiveFields.toArray(new Field[0]);
@@ -140,6 +213,11 @@ public class BinarySerializer<T> implements Serializer<T> {
         result.listElementTypes = listElementTypes;
         result.arrayFields = arrayFields;
         result.arrayComponentTypes = arrayComponentTypes;
+        result.mapFields = mapFields;
+        result.mapKeyTypes = mapKeyTypes;
+        result.mapValueTypes = mapValueTypes;
+        result.objectFields = objectFields;
+        result.objectTypes = objectTypes;
         return result;
     }
 
@@ -225,8 +303,53 @@ public class BinarySerializer<T> implements Serializer<T> {
         return size;
     }
 
+    private int estimateMapFieldsSize(List<Class<?>> mapKeyTypes, List<Class<?>> mapValueTypes) {
+        // Conservative estimate for map fields
+        int total = 0;
+        for (int i = 0; i < mapKeyTypes.size(); i++) {
+            Class<?> keyType = mapKeyTypes.get(i);
+            Class<?> valueType = mapValueTypes.get(i);
+            total += estimateMapSize(keyType, valueType, 10); // Assume average of 10 entries
+        }
+        return total;
+    }
+
+    private int estimateObjectFieldsSize(List<Class<?>> objectTypes) {
+        // Conservative estimate for nested objects
+        int total = 0;
+        for (Class<?> objectType : objectTypes) {
+            total += 1 + 4 + 50; // 1 byte type marker, 4 bytes length, ~50 bytes object data
+        }
+        return total;
+    }
+
+    private static int estimateMapSize(Class<?> keyType, Class<?> valueType, int estimatedEntries) {
+        if (estimatedEntries == 0) {
+            return 4; // size field only
+        }
+
+        int size = 4; // size field
+        int keySize = estimateTypeSize(keyType);
+        int valueSize = estimateTypeSize(valueType);
+        size += estimatedEntries * (keySize + valueSize);
+        return size;
+    }
+
+    private static int estimateTypeSize(Class<?> type) {
+        if (type == int.class || type == Integer.class) return 4;
+        if (type == long.class || type == Long.class) return 8;
+        if (type == double.class || type == Double.class) return 8;
+        if (type == float.class || type == Float.class) return 4;
+        if (type == short.class || type == Short.class) return 2;
+        if (type == byte.class || type == Byte.class) return 1;
+        if (type == boolean.class || type == Boolean.class) return 1;
+        if (type == char.class || type == Character.class) return 2;
+        if (type == String.class) return 24; // 4 bytes length + ~20 bytes content
+        return 50; // Conservative estimate for objects
+    }
+
     /**
-     * Serialize an object to bytes using generated bytecode for both primitives and lists.
+     * Serialize an object to bytes using generated bytecode for primitives, lists, arrays, and maps.
      * ZERO conditionals - everything is direct bytecode calls.
      *
      * @param obj The object to serialize
@@ -262,6 +385,23 @@ public class BinarySerializer<T> implements Serializer<T> {
             Object arrayValue = field.get(obj);
 
             arrayWriters[i].writeArray(byteWriter, arrayValue);
+        }
+
+        // Write map fields using generated bytecode (zero overhead, no conditionals!)
+        for (int i = 0; i < mapFields.length; i++) {
+            Field field = mapFields[i];
+            @SuppressWarnings("unchecked")
+            Map<?, ?> mapValue = (Map<?, ?>) field.get(obj);
+
+            mapWriters[i].writeMap(byteWriter, mapValue);
+        }
+
+        // Write nested object fields using generated bytecode (zero overhead, no conditionals!)
+        for (int i = 0; i < objectFields.length; i++) {
+            Field field = objectFields[i];
+            Object objectValue = field.get(obj);
+
+            objectWriters[i].writeObject(byteWriter, objectValue, nestedSerializers[i]);
         }
 
         return byteWriter.toByteArray();

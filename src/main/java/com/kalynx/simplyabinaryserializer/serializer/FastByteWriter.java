@@ -103,12 +103,6 @@ public class FastByteWriter {
         writeInt(Float.floatToIntBits(v));
     }
 
-    public final void writeBytes(byte[] src, int len) {
-        ensureCapacity(len);
-        System.arraycopy(src, 0, buf, pos, len);
-        pos += len;
-    }
-
     public final void writeBytes(byte[] src) {
         ensureCapacity(src.length);
         System.arraycopy(src, 0, buf, pos, src.length);
@@ -128,5 +122,10 @@ public class FastByteWriter {
         System.arraycopy(strBytes, 0, buf, pos, strBytes.length);
         pos += strBytes.length;
     }
-}
 
+    public final void writeBytes(byte[] bytes, int length) {
+        ensureCapacity(length);
+        System.arraycopy(bytes, 0, buf, pos, length);
+        pos += length;
+    }
+}

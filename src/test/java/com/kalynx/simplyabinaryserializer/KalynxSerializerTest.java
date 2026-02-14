@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -774,5 +776,247 @@ public class KalynxSerializerTest {
         assertArrayEquals(original.byteArray, deserialized.byteArray);
         assertArrayEquals(original.booleanArray, deserialized.booleanArray);
         assertArrayEquals(original.charArray, deserialized.charArray);
+    }
+
+    // ========== Map Tests ==========
+
+    @Test
+    void roundTrip_stringIntegerMap_preservesValues() throws Throwable {
+        KalynxSerializer<StringIntegerMapObject> serializer = new KalynxSerializer<>(StringIntegerMapObject.class);
+
+        Map<String, Integer> map = new HashMap<>();
+        map.put("one", 1);
+        map.put("two", 2);
+        map.put("three", 3);
+
+        StringIntegerMapObject original = new StringIntegerMapObject(map);
+        byte[] bytes = serializer.serialize(original);
+        StringIntegerMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(3, deserialized.map.size());
+        assertEquals(1, deserialized.map.get("one"));
+        assertEquals(2, deserialized.map.get("two"));
+        assertEquals(3, deserialized.map.get("three"));
+    }
+
+    @Test
+    void roundTrip_integerStringMap_preservesValues() throws Throwable {
+        KalynxSerializer<IntegerStringMapObject> serializer = new KalynxSerializer<>(IntegerStringMapObject.class);
+
+        Map<Integer, String> map = new HashMap<>();
+        map.put(1, "one");
+        map.put(2, "two");
+        map.put(3, "three");
+
+        IntegerStringMapObject original = new IntegerStringMapObject(map);
+        byte[] bytes = serializer.serialize(original);
+        IntegerStringMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(3, deserialized.map.size());
+        assertEquals("one", deserialized.map.get(1));
+        assertEquals("two", deserialized.map.get(2));
+        assertEquals("three", deserialized.map.get(3));
+    }
+
+    @Test
+    void roundTrip_integerIntegerMap_preservesValues() throws Throwable {
+        KalynxSerializer<IntegerIntegerMapObject> serializer = new KalynxSerializer<>(IntegerIntegerMapObject.class);
+
+        Map<Integer, Integer> map = new HashMap<>();
+        map.put(1, 100);
+        map.put(2, 200);
+        map.put(3, 300);
+
+        IntegerIntegerMapObject original = new IntegerIntegerMapObject(map);
+        byte[] bytes = serializer.serialize(original);
+        IntegerIntegerMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(3, deserialized.map.size());
+        assertEquals(100, deserialized.map.get(1));
+        assertEquals(200, deserialized.map.get(2));
+        assertEquals(300, deserialized.map.get(3));
+    }
+
+    @Test
+    void roundTrip_longDoubleMap_preservesValues() throws Throwable {
+        KalynxSerializer<LongDoubleMapObject> serializer = new KalynxSerializer<>(LongDoubleMapObject.class);
+
+        Map<Long, Double> map = new HashMap<>();
+        map.put(1L, 1.5);
+        map.put(2L, 2.5);
+        map.put(3L, 3.5);
+
+        LongDoubleMapObject original = new LongDoubleMapObject(map);
+        byte[] bytes = serializer.serialize(original);
+        LongDoubleMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(3, deserialized.map.size());
+        assertEquals(1.5, deserialized.map.get(1L), 0.0001);
+        assertEquals(2.5, deserialized.map.get(2L), 0.0001);
+        assertEquals(3.5, deserialized.map.get(3L), 0.0001);
+    }
+
+    @Test
+    void roundTrip_emptyMap_preservesEmpty() throws Throwable {
+        KalynxSerializer<StringIntegerMapObject> serializer = new KalynxSerializer<>(StringIntegerMapObject.class);
+
+        StringIntegerMapObject original = new StringIntegerMapObject(new HashMap<>());
+        byte[] bytes = serializer.serialize(original);
+        StringIntegerMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(0, deserialized.map.size());
+    }
+
+    @Test
+    void roundTrip_nullMap_preservesNull() throws Throwable {
+        KalynxSerializer<StringIntegerMapObject> serializer = new KalynxSerializer<>(StringIntegerMapObject.class);
+
+        StringIntegerMapObject original = new StringIntegerMapObject(null);
+        byte[] bytes = serializer.serialize(original);
+        StringIntegerMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNull(deserialized.map);
+    }
+
+    @Test
+    void roundTrip_mixedPrimitiveAndMap_preservesAllValues() throws Throwable {
+        KalynxSerializer<MixedPrimitiveAndMapObject> serializer = new KalynxSerializer<>(MixedPrimitiveAndMapObject.class);
+
+        Map<String, Integer> map = new HashMap<>();
+        map.put("a", 10);
+        map.put("b", 20);
+        map.put("c", 30);
+
+        MixedPrimitiveAndMapObject original = new MixedPrimitiveAndMapObject(42, map);
+        byte[] bytes = serializer.serialize(original);
+        MixedPrimitiveAndMapObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(42, deserialized.intValue);
+        assertNotNull(deserialized.map);
+        assertEquals(3, deserialized.map.size());
+        assertEquals(10, deserialized.map.get("a"));
+        assertEquals(20, deserialized.map.get("b"));
+        assertEquals(30, deserialized.map.get("c"));
+    }
+
+    // ========== Nested Object Tests ==========
+
+    @Test
+    void roundTrip_simpleNestedObject_preservesAllValues() throws Throwable {
+        KalynxSerializer<SimpleNestedObject> serializer = new KalynxSerializer<>(SimpleNestedObject.class);
+
+        IntObject nested = new IntObject(42);
+        SimpleNestedObject original = new SimpleNestedObject(100, nested);
+
+        byte[] bytes = serializer.serialize(original);
+        SimpleNestedObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(100, deserialized.value);
+        assertNotNull(deserialized.nested);
+        assertEquals(42, deserialized.nested.value);
+    }
+
+    @Test
+    void roundTrip_nullNestedObject_preservesNull() throws Throwable {
+        KalynxSerializer<SimpleNestedObject> serializer = new KalynxSerializer<>(SimpleNestedObject.class);
+
+        SimpleNestedObject original = new SimpleNestedObject(100, null);
+
+        byte[] bytes = serializer.serialize(original);
+        SimpleNestedObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(100, deserialized.value);
+        assertNull(deserialized.nested);
+    }
+
+    @Test
+    void roundTrip_multiNestedObject_preservesAllValues() throws Throwable {
+        KalynxSerializer<MultiNestedObject> serializer = new KalynxSerializer<>(MultiNestedObject.class);
+
+        IntObject intNested = new IntObject(42);
+        DoubleObject doubleNested = new DoubleObject(3.14159);
+        MultiNestedObject original = new MultiNestedObject(1, intNested, doubleNested, 1234567890L);
+
+        byte[] bytes = serializer.serialize(original);
+        MultiNestedObject deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(1, deserialized.id);
+        assertNotNull(deserialized.intNested);
+        assertEquals(42, deserialized.intNested.value);
+        assertNotNull(deserialized.doubleNested);
+        assertEquals(3.14159, deserialized.doubleNested.value, 0.0001);
+        assertEquals(1234567890L, deserialized.timestamp);
+    }
+
+    @Test
+    void roundTrip_rectangle_preservesNestedPoints() throws Throwable {
+        KalynxSerializer<Rectangle> serializer = new KalynxSerializer<>(Rectangle.class);
+
+        Point topLeft = new Point(10, 20);
+        Point bottomRight = new Point(100, 200);
+        Rectangle original = new Rectangle(topLeft, bottomRight, 0xFF0000);
+
+        byte[] bytes = serializer.serialize(original);
+        Rectangle deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.topLeft);
+        assertEquals(10, deserialized.topLeft.x);
+        assertEquals(20, deserialized.topLeft.y);
+        assertNotNull(deserialized.bottomRight);
+        assertEquals(100, deserialized.bottomRight.x);
+        assertEquals(200, deserialized.bottomRight.y);
+        assertEquals(0xFF0000, deserialized.color);
+    }
+
+    @Test
+    void roundTrip_deepNested_preservesThreeLevels() throws Throwable {
+        KalynxSerializer<DeepNestedLevel1> serializer = new KalynxSerializer<>(DeepNestedLevel1.class);
+
+        DeepNestedLevel3 level3 = new DeepNestedLevel3(300);
+        DeepNestedLevel2 level2 = new DeepNestedLevel2(200, level3);
+        DeepNestedLevel1 original = new DeepNestedLevel1(100, level2);
+
+        byte[] bytes = serializer.serialize(original);
+        DeepNestedLevel1 deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(100, deserialized.level1Value);
+        assertNotNull(deserialized.level2);
+        assertEquals(200, deserialized.level2.level2Value);
+        assertNotNull(deserialized.level2.level3);
+        assertEquals(300, deserialized.level2.level3.level3Value);
+    }
+
+    @Test
+    void roundTrip_deepNestedWithNullMiddle_preservesStructure() throws Throwable {
+        KalynxSerializer<DeepNestedLevel1> serializer = new KalynxSerializer<>(DeepNestedLevel1.class);
+
+        DeepNestedLevel2 level2 = new DeepNestedLevel2(200, null);
+        DeepNestedLevel1 original = new DeepNestedLevel1(100, level2);
+
+        byte[] bytes = serializer.serialize(original);
+        DeepNestedLevel1 deserialized = serializer.deserialize(bytes);
+
+        assertNotNull(deserialized);
+        assertEquals(100, deserialized.level1Value);
+        assertNotNull(deserialized.level2);
+        assertEquals(200, deserialized.level2.level2Value);
+        assertNull(deserialized.level2.level3);
     }
 }

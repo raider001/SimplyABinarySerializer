@@ -49,6 +49,7 @@ public class SerializerConstants {
     public static final MethodTypeDesc MTD_void_short = MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_short);
     public static final MethodTypeDesc MTD_void_byte = MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_byte);
     public static final MethodTypeDesc MTD_void_boolean = MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_boolean);
+    public static final MethodTypeDesc MTD_void_byteArray = MethodTypeDesc.of(ConstantDescs.CD_void, CD_byte_array);
 
     // MethodTypeDesc for FastByteReader methods
     public static final MethodTypeDesc MTD_int = MethodTypeDesc.of(ConstantDescs.CD_int);
@@ -58,6 +59,7 @@ public class SerializerConstants {
     public static final MethodTypeDesc MTD_short = MethodTypeDesc.of(ConstantDescs.CD_short);
     public static final MethodTypeDesc MTD_byte = MethodTypeDesc.of(ConstantDescs.CD_byte);
     public static final MethodTypeDesc MTD_boolean = MethodTypeDesc.of(ConstantDescs.CD_boolean);
+    public static final MethodTypeDesc MTD_String = MethodTypeDesc.of(ConstantDescs.CD_String);
     public static final MethodTypeDesc MTD_byte_array_int = MethodTypeDesc.of(CD_byte_array, ConstantDescs.CD_int);
 
     public static final int ACC_PUBLIC_FINAL_SYNTHETIC = ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC;

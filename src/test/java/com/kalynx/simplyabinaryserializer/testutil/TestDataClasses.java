@@ -1,6 +1,7 @@
 package com.kalynx.simplyabinaryserializer.testutil;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Common test data classes used across serializer and deserializer tests.
@@ -313,6 +314,134 @@ public class TestDataClasses {
             this.byteArray = byteArray;
             this.booleanArray = booleanArray;
             this.charArray = charArray;
+        }
+    }
+
+    // Map test classes
+
+    public static class StringIntegerMapObject {
+        public Map<String, Integer> map;
+        public StringIntegerMapObject() {}
+        public StringIntegerMapObject(Map<String, Integer> map) { this.map = map; }
+    }
+
+    public static class IntegerStringMapObject {
+        public Map<Integer, String> map;
+        public IntegerStringMapObject() {}
+        public IntegerStringMapObject(Map<Integer, String> map) { this.map = map; }
+    }
+
+    public static class IntegerIntegerMapObject {
+        public Map<Integer, Integer> map;
+        public IntegerIntegerMapObject() {}
+        public IntegerIntegerMapObject(Map<Integer, Integer> map) { this.map = map; }
+    }
+
+    public static class LongDoubleMapObject {
+        public Map<Long, Double> map;
+        public LongDoubleMapObject() {}
+        public LongDoubleMapObject(Map<Long, Double> map) { this.map = map; }
+    }
+
+    public static class MixedPrimitiveAndMapObject {
+        public int intValue;
+        public Map<String, Integer> map;
+
+        public MixedPrimitiveAndMapObject() {}
+
+        public MixedPrimitiveAndMapObject(int intValue, Map<String, Integer> map) {
+            this.intValue = intValue;
+            this.map = map;
+        }
+    }
+
+    // ========== Nested Object Test Classes ==========
+
+    public static class Point {
+        public int x;
+        public int y;
+
+        public Point() {}
+
+        public Point(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    public static class Rectangle {
+        public Point topLeft;
+        public Point bottomRight;
+        public int color;
+
+        public Rectangle() {}
+
+        public Rectangle(Point topLeft, Point bottomRight, int color) {
+            this.topLeft = topLeft;
+            this.bottomRight = bottomRight;
+            this.color = color;
+        }
+    }
+
+    public static class SimpleNestedObject {
+        public int value;
+        public IntObject nested;
+
+        public SimpleNestedObject() {}
+
+        public SimpleNestedObject(int value, IntObject nested) {
+            this.value = value;
+            this.nested = nested;
+        }
+    }
+
+    public static class MultiNestedObject {
+        public int id;
+        public IntObject intNested;
+        public DoubleObject doubleNested;
+        public long timestamp;
+
+        public MultiNestedObject() {}
+
+        public MultiNestedObject(int id, IntObject intNested, DoubleObject doubleNested, long timestamp) {
+            this.id = id;
+            this.intNested = intNested;
+            this.doubleNested = doubleNested;
+            this.timestamp = timestamp;
+        }
+    }
+
+    public static class DeepNestedLevel3 {
+        public int level3Value;
+
+        public DeepNestedLevel3() {}
+
+        public DeepNestedLevel3(int level3Value) {
+            this.level3Value = level3Value;
+        }
+    }
+
+    public static class DeepNestedLevel2 {
+        public int level2Value;
+        public DeepNestedLevel3 level3;
+
+        public DeepNestedLevel2() {}
+
+        public DeepNestedLevel2(int level2Value, DeepNestedLevel3 level3) {
+            this.level2Value = level2Value;
+            this.level3 = level3;
+        }
+    }
+
+    public static class DeepNestedLevel1 {
+        public int level1Value;
+        public DeepNestedLevel2 level2;
+
+        public DeepNestedLevel1() {}
+
+        public DeepNestedLevel1(int level1Value, DeepNestedLevel2 level2) {
+            this.level1Value = level1Value;
+            this.level2 = level2;
         }
     }
 }

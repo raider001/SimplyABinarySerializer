@@ -8,15 +8,16 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Binary deserialization controller - handles read operations for primitives, lists, and arrays.
+ * Binary deserialization controller - handles read operations for primitives, lists, arrays, and maps.
  *
  * Design philosophy:
  * - One-way operation: bytes → Object
  * - No references to serializer classes
  * - Optimized for read performance
- * - Supports primitives, List fields, and primitive arrays
+ * - Supports primitives, List fields, primitive arrays, and Maps
  *
  * @param <T> The type this deserializer handles
  */
@@ -29,6 +30,11 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
     private final ListReaderGenerator.ListReader[] listReaders;
     private final Field[] arrayFields;
     private final ArrayReaderGenerator.ArrayReader[] arrayReaders;
+    private final Field[] mapFields;
+    private final MapReaderGenerator.MapReader[] mapReaders;
+    private final Field[] objectFields;
+    private final ObjectReaderGenerator.ObjectReader[] objectReaders;
+    private final BinaryDeserializer<?>[] nestedDeserializers;
 
     public BinaryDeserializer(Class<T> targetClass) throws Throwable {
         this.targetClass = targetClass;
@@ -66,6 +72,31 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
             Class<?> componentType = analysis.arrayComponentTypes.get(i);
             this.arrayReaders[i] = arrayGenerator.generateArrayReader(componentType);
         }
+
+        // Store map fields and generate bytecode map readers
+        this.mapFields = analysis.mapFields.toArray(new Field[0]);
+        this.mapReaders = new MapReaderGenerator.MapReader[mapFields.length];
+
+        // Generate optimized map readers using bytecode (zero overhead!)
+        MapReaderGenerator mapGenerator = new MapReaderGenerator();
+        for (int i = 0; i < mapFields.length; i++) {
+            Class<?> keyType = analysis.mapKeyTypes.get(i);
+            Class<?> valueType = analysis.mapValueTypes.get(i);
+            this.mapReaders[i] = mapGenerator.generateMapReader(keyType, valueType);
+        }
+
+        // Store object fields and generate bytecode object readers
+        this.objectFields = analysis.objectFields.toArray(new Field[0]);
+        this.objectReaders = new ObjectReaderGenerator.ObjectReader[objectFields.length];
+        this.nestedDeserializers = new BinaryDeserializer<?>[objectFields.length];
+
+        // Generate optimized object readers using bytecode (zero overhead!)
+        ObjectReaderGenerator objectGenerator = new ObjectReaderGenerator();
+        for (int i = 0; i < objectFields.length; i++) {
+            Class<?> objectType = analysis.objectTypes.get(i);
+            this.objectReaders[i] = objectGenerator.generateObjectReader(objectType);
+            this.nestedDeserializers[i] = new BinaryDeserializer<>(objectType);
+        }
     }
 
     private static class FieldAnalysisResult {
@@ -74,6 +105,11 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
         List<Class<?>> listElementTypes;
         List<Field> arrayFields;
         List<Class<?>> arrayComponentTypes;
+        List<Field> mapFields;
+        List<Class<?>> mapKeyTypes;
+        List<Class<?>> mapValueTypes;
+        List<Field> objectFields;
+        List<Class<?>> objectTypes;
     }
 
     /**
@@ -86,6 +122,11 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
         List<Class<?>> listElementTypes = new ArrayList<>();
         List<Field> arrayFields = new ArrayList<>();
         List<Class<?>> arrayComponentTypes = new ArrayList<>();
+        List<Field> mapFields = new ArrayList<>();
+        List<Class<?>> mapKeyTypes = new ArrayList<>();
+        List<Class<?>> mapValueTypes = new ArrayList<>();
+        List<Field> objectFields = new ArrayList<>();
+        List<Class<?>> objectTypes = new ArrayList<>();
 
         for (Field field : clazz.getDeclaredFields()) {
             // Skip static and transient fields
@@ -107,6 +148,29 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
                     arrayComponentTypes.add(componentType);
                 }
             }
+            // Check if Map
+            else if (Map.class.isAssignableFrom(field.getType())) {
+                mapFields.add(field);
+
+                // Extract generic types for key and value
+                Type genericType = field.getGenericType();
+                if (genericType instanceof ParameterizedType) {
+                    ParameterizedType paramType = (ParameterizedType) genericType;
+                    Type[] typeArgs = paramType.getActualTypeArguments();
+                    if (typeArgs.length >= 2) {
+                        Class<?> keyType = (typeArgs[0] instanceof Class) ? (Class<?>) typeArgs[0] : Object.class;
+                        Class<?> valueType = (typeArgs[1] instanceof Class) ? (Class<?>) typeArgs[1] : Object.class;
+                        mapKeyTypes.add(keyType);
+                        mapValueTypes.add(valueType);
+                    } else {
+                        mapKeyTypes.add(Object.class);
+                        mapValueTypes.add(Object.class);
+                    }
+                } else {
+                    mapKeyTypes.add(Object.class);
+                    mapValueTypes.add(Object.class);
+                }
+            }
             // Check if List
             else if (List.class.isAssignableFrom(field.getType())) {
                 listFields.add(field);
@@ -125,6 +189,11 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
                     listElementTypes.add(Object.class);
                 }
             }
+            // Otherwise it's a nested object field
+            else {
+                objectFields.add(field);
+                objectTypes.add(field.getType());
+            }
         }
 
         result.primitiveFields = primitiveFields.toArray(new Field[0]);
@@ -132,6 +201,11 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
         result.listElementTypes = listElementTypes;
         result.arrayFields = arrayFields;
         result.arrayComponentTypes = arrayComponentTypes;
+        result.mapFields = mapFields;
+        result.mapKeyTypes = mapKeyTypes;
+        result.mapValueTypes = mapValueTypes;
+        result.objectFields = objectFields;
+        result.objectTypes = objectTypes;
         return result;
     }
 
@@ -165,6 +239,20 @@ public class BinaryDeserializer<T> implements Deserializer<T> {
             Field field = arrayFields[i];
             Object arrayValue = arrayReaders[i].readArray(byteReader);
             field.set(obj, arrayValue);
+        }
+
+        // Read map fields using generated bytecode (zero overhead, no conditionals!)
+        for (int i = 0; i < mapFields.length; i++) {
+            Field field = mapFields[i];
+            Map<?, ?> mapValue = mapReaders[i].readMap(byteReader);
+            field.set(obj, mapValue);
+        }
+
+        // Read nested object fields using generated bytecode (zero overhead, no conditionals!)
+        for (int i = 0; i < objectFields.length; i++) {
+            Field field = objectFields[i];
+            Object objectValue = objectReaders[i].readObject(byteReader, nestedDeserializers[i]);
+            field.set(obj, objectValue);
         }
 
         return obj;
