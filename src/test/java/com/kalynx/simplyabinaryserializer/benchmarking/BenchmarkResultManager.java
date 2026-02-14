@@ -228,7 +228,7 @@ public class BenchmarkResultManager {
                     double rtMean = libraryRoundTrips.get(library);
                     String formatted = String.format("%.2f", rtMean);
                     if (Math.abs(rtMean - bestRoundTrip) < 0.01) {
-                        row.append(" **").append(formatted).append("** |");
+                        row.append(" 🏆 **").append(formatted).append("** |");
                     } else {
                         row.append(" ").append(formatted).append(" |");
                     }
@@ -245,7 +245,7 @@ public class BenchmarkResultManager {
     private String formatValue(double value, double bestValue) {
         String formatted = String.format("%.2f", value);
         if (Math.abs(value - bestValue) < 0.01) {
-            return "**" + formatted + "**";
+            return "🏆 **" + formatted + "**";
         }
         return formatted;
     }
@@ -253,7 +253,7 @@ public class BenchmarkResultManager {
     private String formatIntValue(int value, int bestValue) {
         String formatted = String.valueOf(value);
         if (value == bestValue) {
-            return "**" + formatted + "**";
+            return "🏆 **" + formatted + "**";
         }
         return formatted;
     }
@@ -261,7 +261,7 @@ public class BenchmarkResultManager {
     private String formatThroughput(double value, double bestValue) {
         String formatted = String.format("%,.0f", value);
         if (Math.abs(value - bestValue) < 1.0) {
-            return "**" + formatted + "**";
+            return "🏆 **" + formatted + "**";
         }
         return formatted;
     }
