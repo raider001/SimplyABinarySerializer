@@ -1093,5 +1093,271 @@ public class KalynxSerializerTest {
         assertEquals(200, deserialized.level2.level2Value);
         assertNull(deserialized.level2.level3);
     }
+
+    // ============================================================================
+    // TypeReference Tests
+    // ============================================================================
+
+    @Test
+    void typeReference_capturesListType() {
+        TypeReference<List<Integer>> typeRef = new TypeReference<List<Integer>>() {};
+
+        assertEquals(List.class, typeRef.getRawType());
+        assertNotNull(typeRef.getType());
+        assertTrue(typeRef.getType().toString().contains("java.util.List"));
+        assertTrue(typeRef.getType().toString().contains("Integer"));
+    }
+
+    @Test
+    void typeReference_capturesMapType() {
+        TypeReference<Map<String, Integer>> typeRef = new TypeReference<Map<String, Integer>>() {};
+
+        assertEquals(Map.class, typeRef.getRawType());
+        assertNotNull(typeRef.getType());
+        assertTrue(typeRef.getType().toString().contains("java.util.Map"));
+    }
+
+    @Test
+    void typeReference_equalityBasedOnType() {
+        TypeReference<List<Integer>> ref1 = new TypeReference<List<Integer>>() {};
+        TypeReference<List<Integer>> ref2 = new TypeReference<List<Integer>>() {};
+        TypeReference<List<String>> ref3 = new TypeReference<List<String>>() {};
+
+        assertEquals(ref1, ref2, "Same generic types should be equal");
+        assertNotEquals(ref1, ref3, "Different generic types should not be equal");
+        assertEquals(ref1.hashCode(), ref2.hashCode(), "Equal types should have same hashCode");
+    }
+
+    @Test
+    void typeReference_toStringContainsTypeInfo() {
+        TypeReference<List<Integer>> typeRef = new TypeReference<List<Integer>>() {};
+
+        String str = typeRef.toString();
+        assertTrue(str.contains("TypeReference"));
+        assertTrue(str.contains("List") || str.contains("java.util.List"));
+    }
+
+    // ============================================================================
+    // Generic Serialization Tests with TypeReference
+    // ============================================================================
+
+    @Test
+    void typeReference_canBeUsedToCheckRegistration() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        TypeReference<IntegerListObject> typeRef = new TypeReference<IntegerListObject>() {};
+
+        assertFalse(serializer.isRegistered(typeRef), "Should not be registered initially");
+        assertFalse(serializer.isRegistered(IntegerListObject.class), "Class should not be registered initially");
+
+        serializer.register(IntegerListObject.class);
+
+        assertTrue(serializer.isRegistered(IntegerListObject.class),
+            "IntegerListObject.class should be registered after registering");
+    }
+
+    @Test
+    void roundTrip_integerListObject_withTypeInformation() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+        serializer.register(IntegerListObject.class);
+
+        List<Integer> values = Arrays.asList(1, 2, 3, 4, 5);
+        IntegerListObject original = new IntegerListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes, IntegerListObject.class);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.values);
+        assertEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void roundTrip_stringListObject_withTypeInformation() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+        serializer.register(StringListObject.class);
+
+        List<String> strings = Arrays.asList("hello", "world", "test");
+        StringListObject original = new StringListObject(strings);
+
+        byte[] bytes = serializer.serialize(original);
+        StringListObject deserialized = serializer.deserialize(bytes, StringListObject.class);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.strings);
+        assertEquals(original.strings, deserialized.strings);
+    }
+
+    @Test
+    void roundTrip_mapObject_withGenericTypes() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+        serializer.register(StringIntegerMapObject.class);
+
+        Map<String, Integer> map = new HashMap<>();
+        map.put("one", 1);
+        map.put("two", 2);
+        map.put("three", 3);
+
+        StringIntegerMapObject original = new StringIntegerMapObject(map);
+        byte[] bytes = serializer.serialize(original);
+        StringIntegerMapObject deserialized = serializer.deserialize(bytes, StringIntegerMapObject.class);
+
+        assertNotNull(deserialized);
+        assertNotNull(deserialized.map);
+        assertEquals(original.map.size(), deserialized.map.size());
+    }
+
+    @Test
+    void register_typeReference_storesTypeInformation() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        TypeReference<IntegerListObject> typeRef = new TypeReference<IntegerListObject>() {};
+
+        serializer.register(typeRef);
+
+        assertTrue(serializer.isRegistered(typeRef));
+        assertTrue(serializer.isRegistered(IntegerListObject.class));
+    }
+
+    @Test
+    void deserialize_withTypeReference_worksForRegisteredTypes() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        TypeReference<IntegerListObject> typeRef = new TypeReference<IntegerListObject>() {};
+        serializer.register(typeRef);
+
+        List<Integer> values = Arrays.asList(10, 20, 30);
+        IntegerListObject original = new IntegerListObject(values);
+
+        byte[] bytes = serializer.serialize(original);
+        IntegerListObject deserialized = serializer.deserialize(bytes, typeRef);
+
+        assertNotNull(deserialized);
+        assertEquals(original.values, deserialized.values);
+    }
+
+    @Test
+    void deserialize_unregisteredTypeReference_throwsException() {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        byte[] bytes = new byte[]{1, 2, 3};
+        TypeReference<IntegerListObject> typeRef = new TypeReference<IntegerListObject>() {};
+
+        assertThrows(IllegalStateException.class, () ->
+            serializer.deserialize(bytes, typeRef),
+            "Should throw exception for unregistered type");
+    }
+
+    @Test
+    void typeReference_differentGenericTypes_notEqual() {
+        TypeReference<List<Integer>> ref1 = new TypeReference<List<Integer>>() {};
+        TypeReference<List<String>> ref2 = new TypeReference<List<String>>() {};
+
+        assertNotEquals(ref1, ref2, "Different generic types should not be equal");
+        assertNotEquals(ref1.getType(), ref2.getType());
+    }
+
+    // ============================================================================
+    // Multi-Class Registration Tests
+    // ============================================================================
+
+    @Test
+    void multiClass_fluentRegistration() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        // Register multiple classes using fluent API
+        serializer
+                .register(Person.class)
+                .register(Address.class)
+                .register(Company.class);
+
+        // Verify all are registered
+        assertTrue(serializer.isRegistered(Person.class));
+        assertTrue(serializer.isRegistered(Address.class));
+        assertTrue(serializer.isRegistered(Company.class));
+        assertFalse(serializer.isRegistered(String.class));
+
+        // Create and serialize different types
+        Person person = new Person("Alice", 28, "alice@example.com");
+        Address address = new Address("123 Main St", "Springfield", "12345");
+        Company company = new Company("TechCorp", 500);
+
+        byte[] personBytes = serializer.serialize(person);
+        byte[] addressBytes = serializer.serialize(address);
+        byte[] companyBytes = serializer.serialize(company);
+
+        // Deserialize and verify
+        Person deserializedPerson = serializer.deserialize(personBytes, Person.class);
+        Address deserializedAddress = serializer.deserialize(addressBytes, Address.class);
+        Company deserializedCompany = serializer.deserialize(companyBytes, Company.class);
+
+        assertEquals(person.name, deserializedPerson.name);
+        assertEquals(person.age, deserializedPerson.age);
+        assertEquals(person.email, deserializedPerson.email);
+
+        assertEquals(address.street, deserializedAddress.street);
+        assertEquals(address.city, deserializedAddress.city);
+        assertEquals(address.zipCode, deserializedAddress.zipCode);
+
+        assertEquals(company.name, deserializedCompany.name);
+        assertEquals(company.employeeCount, deserializedCompany.employeeCount);
+    }
+
+    @Test
+    void multiClass_separateRegistration() throws Throwable {
+        KalynxSerializer serializer = new KalynxSerializer();
+
+        // Register classes separately
+        serializer.register(Person.class);
+        serializer.register(Address.class);
+
+        Person person = new Person("Bob", 35, "bob@test.com");
+        byte[] bytes = serializer.serialize(person);
+        Person result = serializer.deserialize(bytes, Person.class);
+
+        assertEquals("Bob", result.name);
+        assertEquals(35, result.age);
+    }
+
+    // Helper classes for multi-class tests
+    public static class Person {
+        public String name;
+        public int age;
+        public String email;
+
+        public Person() {}
+
+        public Person(String name, int age, String email) {
+            this.name = name;
+            this.age = age;
+            this.email = email;
+        }
+    }
+
+    public static class Address {
+        public String street;
+        public String city;
+        public String zipCode;
+
+        public Address() {}
+
+        public Address(String street, String city, String zipCode) {
+            this.street = street;
+            this.city = city;
+            this.zipCode = zipCode;
+        }
+    }
+
+    public static class Company {
+        public String name;
+        public int employeeCount;
+
+        public Company() {}
+
+        public Company(String name, int employeeCount) {
+            this.name = name;
+            this.employeeCount = employeeCount;
+        }
+    }
 }
 

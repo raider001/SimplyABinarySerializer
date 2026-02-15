@@ -1482,6 +1482,144 @@ kalynxDocument.register(DocumentObject.class);
                 serializeTime, deserializeTime, lastSerialized.length, iterations);
     }
 
+    // ========== TypeReference Performance Tests ==========
+
+    @Test
+    void benchmark_typeReference_registration() throws Throwable {
+        System.out.println("\n=== TypeReference Registration Benchmark ===");
+
+        // Benchmark Class-based registration
+        long classStart = System.nanoTime();
+        for (int i = 0; i < 10_000; i++) {
+            KalynxSerializer serializer = new KalynxSerializer();
+            serializer.register(IntegerListObject.class);
+        }
+        long classTime = (System.nanoTime() - classStart) / 1_000_000;
+
+        // Benchmark TypeReference-based registration
+        long typeRefStart = System.nanoTime();
+        for (int i = 0; i < 10_000; i++) {
+            KalynxSerializer serializer = new KalynxSerializer();
+            serializer.register(new com.kalynx.simplyabinaryserializer.TypeReference<IntegerListObject>() {});
+        }
+        long typeRefTime = (System.nanoTime() - typeRefStart) / 1_000_000;
+
+        System.out.println("Class-based registration:       " + classTime + " ms");
+        System.out.println("TypeReference-based registration: " + typeRefTime + " ms");
+        System.out.println("Overhead: " + (typeRefTime - classTime) + " ms (" +
+            String.format("%.1f%%", ((double)(typeRefTime - classTime) / classTime * 100)) + ")");
+    }
+
+    @Test
+    void benchmark_typeReference_serialization() throws Throwable {
+        System.out.println("\n=== TypeReference Serialization Benchmark ===");
+
+        List<Integer> values = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        IntegerListObject[] objects = new IntegerListObject[BENCHMARK_ITERATIONS];
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            objects[i] = new IntegerListObject(values);
+        }
+
+        // Benchmark Class-based serialization
+        KalynxSerializer classSerializer = new KalynxSerializer();
+        classSerializer.register(IntegerListObject.class);
+
+        long classStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            classSerializer.serialize(objects[i]);
+        }
+        long classTime = (System.nanoTime() - classStart) / 1_000_000;
+
+        // Benchmark TypeReference-based serialization
+        KalynxSerializer typeRefSerializer = new KalynxSerializer();
+        typeRefSerializer.register(new com.kalynx.simplyabinaryserializer.TypeReference<IntegerListObject>() {});
+
+        long typeRefStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            typeRefSerializer.serialize(objects[i]);
+        }
+        long typeRefTime = (System.nanoTime() - typeRefStart) / 1_000_000;
+
+        System.out.println("Class-based serialization:       " + classTime + " ms");
+        System.out.println("TypeReference-based serialization: " + typeRefTime + " ms");
+        System.out.println("Difference: " + Math.abs(typeRefTime - classTime) + " ms (" +
+            String.format("%.1f%%", (Math.abs((double)(typeRefTime - classTime)) / classTime * 100)) + ")");
+        System.out.println("Conclusion: " + (Math.abs(typeRefTime - classTime) < classTime * 0.05 ?
+            "✅ TypeReference has negligible overhead" :
+            "⚠️ TypeReference may have measurable overhead"));
+    }
+
+    @Test
+    void benchmark_typeReference_deserialization() throws Throwable {
+        System.out.println("\n=== TypeReference Deserialization Benchmark ===");
+
+        List<Integer> values = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        IntegerListObject obj = new IntegerListObject(values);
+
+        // Prepare serializers and serialized data
+        KalynxSerializer classSerializer = new KalynxSerializer();
+        classSerializer.register(IntegerListObject.class);
+        byte[] bytes = classSerializer.serialize(obj);
+
+        KalynxSerializer typeRefSerializer = new KalynxSerializer();
+        com.kalynx.simplyabinaryserializer.TypeReference<IntegerListObject> typeRef =
+            new com.kalynx.simplyabinaryserializer.TypeReference<IntegerListObject>() {};
+        typeRefSerializer.register(typeRef);
+
+        // Benchmark Class-based deserialization
+        long classStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            classSerializer.deserialize(bytes, IntegerListObject.class);
+        }
+        long classTime = (System.nanoTime() - classStart) / 1_000_000;
+
+        // Benchmark TypeReference-based deserialization
+        long typeRefStart = System.nanoTime();
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            typeRefSerializer.deserialize(bytes, typeRef);
+        }
+        long typeRefTime = (System.nanoTime() - typeRefStart) / 1_000_000;
+
+        System.out.println("Class-based deserialization:       " + classTime + " ms");
+        System.out.println("TypeReference-based deserialization: " + typeRefTime + " ms");
+        System.out.println("Difference: " + Math.abs(typeRefTime - classTime) + " ms (" +
+            String.format("%.1f%%", (Math.abs((double)(typeRefTime - classTime)) / classTime * 100)) + ")");
+        System.out.println("Conclusion: " + (Math.abs(typeRefTime - classTime) < classTime * 0.05 ?
+            "✅ TypeReference has negligible overhead" :
+            "⚠️ TypeReference may have measurable overhead"));
+    }
+
+    @Test
+    void benchmark_multiClass_registration() throws Throwable {
+        System.out.println("\n=== Multi-Class Registration Benchmark ===");
+
+        // Benchmark individual registration
+        long individualStart = System.nanoTime();
+        for (int i = 0; i < 10_000; i++) {
+            KalynxSerializer serializer = new KalynxSerializer();
+            serializer.register(AllPrimitivesObject.class);
+            serializer.register(IntegerListObject.class);
+            serializer.register(StringIntegerMapObject.class);
+        }
+        long individualTime = (System.nanoTime() - individualStart) / 1_000_000;
+
+        // Benchmark fluent registration
+        long fluentStart = System.nanoTime();
+        for (int i = 0; i < 10_000; i++) {
+            new KalynxSerializer()
+                .register(AllPrimitivesObject.class)
+                .register(IntegerListObject.class)
+                .register(StringIntegerMapObject.class);
+        }
+        long fluentTime = (System.nanoTime() - fluentStart) / 1_000_000;
+
+        System.out.println("Individual registration: " + individualTime + " ms");
+        System.out.println("Fluent registration:     " + fluentTime + " ms");
+        System.out.println("Performance: " + (individualTime == fluentTime ? "Identical" :
+            (fluentTime < individualTime ? "Fluent is faster" : "Individual is faster")) +
+            " (diff: " + Math.abs(fluentTime - individualTime) + " ms)");
+    }
+
     // ========== Final Report ==========
 
     @AfterAll
