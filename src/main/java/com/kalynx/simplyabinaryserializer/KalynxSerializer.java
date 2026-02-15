@@ -4,28 +4,57 @@ import com.kalynx.simplyabinaryserializer.deserializer.BinaryDeserializer;
 import com.kalynx.simplyabinaryserializer.serializer.BinarySerializer;
 
 /**
- * Top-level serializer that delegates to separate serialization and deserialization controllers.
- * This design ensures complete separation between read and write operations.
- *
- * @param <T> The type this serializer handles
+ * Top-level serializer that supports multiple registered classes.
+ * Includes an internal registry for managing serializers and deserializers.
  */
-public class KalynxSerializer<T> implements Serializer<T>, Deserializer<T> {
+public class KalynxSerializer {
 
-    private final BinarySerializer<T> serializer;
-    private final BinaryDeserializer<T> deserializer;
+    private final SerializerRegistry registry = new SerializerRegistry();
 
-    public KalynxSerializer(Class<T> targetClass) throws Throwable {
-        this.serializer = new BinarySerializer<>(targetClass);
-        this.deserializer = new BinaryDeserializer<>(targetClass);
+    /**
+     * Register a class for serialization/deserialization.
+     */
+    public <T> KalynxSerializer register(Class<T> clazz) throws Throwable {
+        registry.register(clazz);
+        return this;
     }
 
-    @Override
-    public  byte[] serialize(T obj) throws Throwable {
+    /**
+     * Check if a class is registered.
+     */
+    public boolean isRegistered(Class<?> clazz) {
+        return registry.isRegistered(clazz);
+    }
+
+    /**
+     * Serialize an object. The object's class must be registered first.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> byte[] serialize(T obj) throws Throwable {
+        if (obj == null) {
+            throw new IllegalArgumentException("Cannot serialize null object");
+        }
+
+        BinarySerializer<T> serializer = (BinarySerializer<T>) registry.getSerializer(obj.getClass());
         return serializer.serialize(obj);
     }
 
-    @Override
-    public T deserialize(byte[] bytes) throws Throwable {
+    /**
+     * Deserialize bytes into an object of the specified type.
+     */
+    public <T> T deserialize(byte[] bytes, Class<T> clazz) throws Throwable {
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("Cannot deserialize null or empty bytes");
+        }
+
+        BinaryDeserializer<T> deserializer = registry.getDeserializer(clazz);
         return deserializer.deserialize(bytes);
+    }
+
+    /**
+     * Get the internal registry for advanced use cases.
+     */
+    public SerializerRegistry getRegistry() {
+        return registry;
     }
 }

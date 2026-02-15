@@ -83,28 +83,28 @@ public class KalynxBenchmarkRunnerTests {
     private static BenchmarkResultManager resultManager;
 
     // KalynxSerializer instances
-    private KalynxSerializer<AllPrimitivesObject> kalynxAllPrimitives;
-    private KalynxSerializer<IntegerListObject> kalynxIntegerList;
-    private KalynxSerializer<StringListObject> kalynxStringList;
-    private KalynxSerializer<LongListObject> kalynxLongList;
-    private KalynxSerializer<DoubleListObject> kalynxDoubleList;
-    private KalynxSerializer<MixedPrimitiveAndListObject> kalynxMixedPrimitiveList;
-    private KalynxSerializer<AllPrimitivesWithListsObject> kalynxAllPrimitivesWithLists;
-    private KalynxSerializer<StringIntegerMapObject> kalynxStringIntegerMap;
-    private KalynxSerializer<IntegerStringMapObject> kalynxIntegerStringMap;
-    private KalynxSerializer<IntegerIntegerMapObject> kalynxIntegerIntegerMap;
-    private KalynxSerializer<LongDoubleMapObject> kalynxLongDoubleMap;
-    private KalynxSerializer<IntArrayObject> kalynxIntArray;
-    private KalynxSerializer<LongArrayObject> kalynxLongArray;
-    private KalynxSerializer<DoubleArrayObject> kalynxDoubleArray;
-    private KalynxSerializer<AllPrimitiveArraysObject> kalynxAllPrimitiveArrays;
-    private KalynxSerializer<SimpleNestedObject> kalynxSimpleNested;
-    private KalynxSerializer<Rectangle> kalynxRectangle;
-    private KalynxSerializer<DeepNestedLevel1> kalynxDeepNested;
-    private KalynxSerializer<LargeStringObject> kalynxLargeString;
-    private KalynxSerializer<LargeStringListObject> kalynxLargeStringList;
-    private KalynxSerializer<MixedSizeStringListObject> kalynxMixedSizeStringList;
-    private KalynxSerializer<DocumentObject> kalynxDocument;
+    private KalynxSerializer kalynxAllPrimitives;
+    private KalynxSerializer kalynxIntegerList;
+    private KalynxSerializer kalynxStringList;
+    private KalynxSerializer kalynxLongList;
+    private KalynxSerializer kalynxDoubleList;
+    private KalynxSerializer kalynxMixedPrimitiveList;
+    private KalynxSerializer kalynxAllPrimitivesWithLists;
+    private KalynxSerializer kalynxStringIntegerMap;
+    private KalynxSerializer kalynxIntegerStringMap;
+    private KalynxSerializer kalynxIntegerIntegerMap;
+    private KalynxSerializer kalynxLongDoubleMap;
+    private KalynxSerializer kalynxIntArray;
+    private KalynxSerializer kalynxLongArray;
+    private KalynxSerializer kalynxDoubleArray;
+    private KalynxSerializer kalynxAllPrimitiveArrays;
+    private KalynxSerializer kalynxSimpleNested;
+    private KalynxSerializer kalynxRectangle;
+    private KalynxSerializer kalynxDeepNested;
+    private KalynxSerializer kalynxLargeString;
+    private KalynxSerializer kalynxLargeStringList;
+    private KalynxSerializer kalynxMixedSizeStringList;
+    private KalynxSerializer kalynxDocument;
 
     // Kryo and Fury
     private ThreadLocal<Kryo> kryoThreadLocal;
@@ -133,7 +133,8 @@ public class KalynxBenchmarkRunnerTests {
     }
 
     private static void performWarmup() throws Throwable {
-        KalynxSerializer<AllPrimitivesObject> ks = new KalynxSerializer<>(AllPrimitivesObject.class);
+        KalynxSerializer ks = new KalynxSerializer();
+ks.register(AllPrimitivesObject.class);
 
         ThreadLocal<Kryo> kryo = ThreadLocal.withInitial(() -> {
             Kryo k = new Kryo();
@@ -148,7 +149,7 @@ public class KalynxBenchmarkRunnerTests {
             AllPrimitivesObject obj = createAllPrimitivesObject(i);
 
             byte[] kdata = ks.serialize(obj);
-            ks.deserialize(kdata);
+            ks.deserialize(kdata, AllPrimitivesObject.class);
 
 
 
@@ -171,28 +172,50 @@ public class KalynxBenchmarkRunnerTests {
     @BeforeEach
     public void setUp() throws Throwable {
         // Initialize KalynxSerializer instances
-        kalynxAllPrimitives = new KalynxSerializer<>(AllPrimitivesObject.class);
-        kalynxIntegerList = new KalynxSerializer<>(IntegerListObject.class);
-        kalynxStringList = new KalynxSerializer<>(StringListObject.class);
-        kalynxLongList = new KalynxSerializer<>(LongListObject.class);
-        kalynxDoubleList = new KalynxSerializer<>(DoubleListObject.class);
-        kalynxMixedPrimitiveList = new KalynxSerializer<>(MixedPrimitiveAndListObject.class);
-        kalynxAllPrimitivesWithLists = new KalynxSerializer<>(AllPrimitivesWithListsObject.class);
-        kalynxStringIntegerMap = new KalynxSerializer<>(StringIntegerMapObject.class);
-        kalynxIntegerStringMap = new KalynxSerializer<>(IntegerStringMapObject.class);
-        kalynxIntegerIntegerMap = new KalynxSerializer<>(IntegerIntegerMapObject.class);
-        kalynxLongDoubleMap = new KalynxSerializer<>(LongDoubleMapObject.class);
-        kalynxIntArray = new KalynxSerializer<>(IntArrayObject.class);
-        kalynxLongArray = new KalynxSerializer<>(LongArrayObject.class);
-        kalynxDoubleArray = new KalynxSerializer<>(DoubleArrayObject.class);
-        kalynxAllPrimitiveArrays = new KalynxSerializer<>(AllPrimitiveArraysObject.class);
-        kalynxSimpleNested = new KalynxSerializer<>(SimpleNestedObject.class);
-        kalynxRectangle = new KalynxSerializer<>(Rectangle.class);
-        kalynxDeepNested = new KalynxSerializer<>(DeepNestedLevel1.class);
-        kalynxLargeString = new KalynxSerializer<>(LargeStringObject.class);
-        kalynxLargeStringList = new KalynxSerializer<>(LargeStringListObject.class);
-        kalynxMixedSizeStringList = new KalynxSerializer<>(MixedSizeStringListObject.class);
-        kalynxDocument = new KalynxSerializer<>(DocumentObject.class);
+        kalynxAllPrimitives = new KalynxSerializer();
+kalynxAllPrimitives.register(AllPrimitivesObject.class);
+        kalynxIntegerList = new KalynxSerializer();
+kalynxIntegerList.register(IntegerListObject.class);
+        kalynxStringList = new KalynxSerializer();
+kalynxStringList.register(StringListObject.class);
+        kalynxLongList = new KalynxSerializer();
+kalynxLongList.register(LongListObject.class);
+        kalynxDoubleList = new KalynxSerializer();
+kalynxDoubleList.register(DoubleListObject.class);
+        kalynxMixedPrimitiveList = new KalynxSerializer();
+kalynxMixedPrimitiveList.register(MixedPrimitiveAndListObject.class);
+        kalynxAllPrimitivesWithLists = new KalynxSerializer();
+kalynxAllPrimitivesWithLists.register(AllPrimitivesWithListsObject.class);
+        kalynxStringIntegerMap = new KalynxSerializer();
+kalynxStringIntegerMap.register(StringIntegerMapObject.class);
+        kalynxIntegerStringMap = new KalynxSerializer();
+kalynxIntegerStringMap.register(IntegerStringMapObject.class);
+        kalynxIntegerIntegerMap = new KalynxSerializer();
+kalynxIntegerIntegerMap.register(IntegerIntegerMapObject.class);
+        kalynxLongDoubleMap = new KalynxSerializer();
+kalynxLongDoubleMap.register(LongDoubleMapObject.class);
+        kalynxIntArray = new KalynxSerializer();
+kalynxIntArray.register(IntArrayObject.class);
+        kalynxLongArray = new KalynxSerializer();
+kalynxLongArray.register(LongArrayObject.class);
+        kalynxDoubleArray = new KalynxSerializer();
+kalynxDoubleArray.register(DoubleArrayObject.class);
+        kalynxAllPrimitiveArrays = new KalynxSerializer();
+kalynxAllPrimitiveArrays.register(AllPrimitiveArraysObject.class);
+        kalynxSimpleNested = new KalynxSerializer();
+kalynxSimpleNested.register(SimpleNestedObject.class);
+        kalynxRectangle = new KalynxSerializer();
+kalynxRectangle.register(Rectangle.class);
+        kalynxDeepNested = new KalynxSerializer();
+kalynxDeepNested.register(DeepNestedLevel1.class);
+        kalynxLargeString = new KalynxSerializer();
+kalynxLargeString.register(LargeStringObject.class);
+        kalynxLargeStringList = new KalynxSerializer();
+kalynxLargeStringList.register(LargeStringListObject.class);
+        kalynxMixedSizeStringList = new KalynxSerializer();
+kalynxMixedSizeStringList.register(MixedSizeStringListObject.class);
+        kalynxDocument = new KalynxSerializer();
+kalynxDocument.register(DocumentObject.class);
 
         // Initialize Kryo
         kryoThreadLocal = ThreadLocal.withInitial(() -> {
@@ -1394,7 +1417,7 @@ public class KalynxBenchmarkRunnerTests {
     // ========== Benchmark Helper Methods ==========
 
     private <T> BenchmarkResultManager.SerializationResult benchmarkKalynxSerializer(
-            KalynxSerializer<T> serializer, T[] objects, int iterations) throws Throwable {
+            KalynxSerializer serializer, T[] objects, int iterations) throws Throwable {
 
         long startSerialize = System.nanoTime();
         byte[] lastSerialized = null;
@@ -1405,7 +1428,7 @@ public class KalynxBenchmarkRunnerTests {
 
         long startDeserialize = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
-            serializer.deserialize(lastSerialized);
+            serializer.deserialize(lastSerialized, objects[0].getClass());
         }
         long deserializeTime = System.nanoTime() - startDeserialize;
 
