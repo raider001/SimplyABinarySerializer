@@ -14,12 +14,21 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class SerializerRegistry {
 
-    private final Map<Class<?>, BinarySerializer<?>> serializersByClass = new ConcurrentHashMap<>();
-    private final Map<Class<?>, BinaryDeserializer<?>> deserializersByClass = new ConcurrentHashMap<>();
+    private final Map<Class<?>, Serializer<?>> serializersByClass = new ConcurrentHashMap<>();
+    private final Map<Class<?>, Deserializer<?>> deserializersByClass = new ConcurrentHashMap<>();
 
     // For generic types, we use Type as the key
-    private final Map<Type, BinarySerializer<?>> serializersByType = new ConcurrentHashMap<>();
-    private final Map<Type, BinaryDeserializer<?>> deserializersByType = new ConcurrentHashMap<>();
+    private final Map<Type, Serializer<?>> serializersByType = new ConcurrentHashMap<>();
+    private final Map<Type, Deserializer<?>> deserializersByType = new ConcurrentHashMap<>();
+
+    /**
+     * Register a custom serializer/deserializer pair for a type.
+     * Use this for types the bytecode generator cannot introspect (e.g. JDK built-ins).
+     */
+    public <T> void registerCustom(Class<T> clazz, Serializer<T> serializer, Deserializer<T> deserializer) {
+        serializersByClass.put(clazz, serializer);
+        deserializersByClass.put(clazz, deserializer);
+    }
 
     /**
      * Register a class for serialization/deserialization.
@@ -75,8 +84,8 @@ public class SerializerRegistry {
      * Get the serializer for a specific class.
      */
     @SuppressWarnings("unchecked")
-    public <T> BinarySerializer<T> getSerializer(Class<T> clazz) {
-        BinarySerializer<T> serializer = (BinarySerializer<T>) serializersByClass.get(clazz);
+    public <T> Serializer<T> getSerializer(Class<T> clazz) {
+        Serializer<T> serializer = (Serializer<T>) serializersByClass.get(clazz);
         if (serializer == null) {
             throw new IllegalStateException("Class not registered: " + clazz.getName());
         }
@@ -86,8 +95,8 @@ public class SerializerRegistry {
     /**
      * Get the serializer for a specific type (including generic types).
      */
-    public BinarySerializer<?> getSerializer(Type type) {
-        BinarySerializer<?> serializer = serializersByType.get(type);
+    public Serializer<?> getSerializer(Type type) {
+        Serializer<?> serializer = serializersByType.get(type);
         if (serializer == null) {
             throw new IllegalStateException("Type not registered: " + type);
         }
@@ -98,8 +107,8 @@ public class SerializerRegistry {
      * Get the deserializer for a specific class.
      */
     @SuppressWarnings("unchecked")
-    public <T> BinaryDeserializer<T> getDeserializer(Class<T> clazz) {
-        BinaryDeserializer<T> deserializer = (BinaryDeserializer<T>) deserializersByClass.get(clazz);
+    public <T> Deserializer<T> getDeserializer(Class<T> clazz) {
+        Deserializer<T> deserializer = (Deserializer<T>) deserializersByClass.get(clazz);
         if (deserializer == null) {
             throw new IllegalStateException("Class not registered: " + clazz.getName());
         }
@@ -109,13 +118,11 @@ public class SerializerRegistry {
     /**
      * Get the deserializer for a specific type (including generic types).
      */
-    public BinaryDeserializer<?> getDeserializer(Type type) {
-        BinaryDeserializer<?> deserializer = deserializersByType.get(type);
+    public Deserializer<?> getDeserializer(Type type) {
+        Deserializer<?> deserializer = deserializersByType.get(type);
         if (deserializer == null) {
             throw new IllegalStateException("Type not registered: " + type);
         }
         return deserializer;
     }
 }
-
-

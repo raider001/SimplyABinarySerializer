@@ -15,6 +15,15 @@ public class KalynxSerializer {
     private final SerializerRegistry registry = new SerializerRegistry();
 
     /**
+     * Register a custom serializer/deserializer pair for a type.
+     * Use this for types the bytecode generator cannot introspect (e.g. JDK built-ins like String).
+     */
+    public <T> KalynxSerializer registerCustom(Class<T> clazz, Serializer<T> serializer, Deserializer<T> deserializer) {
+        registry.registerCustom(clazz, serializer, deserializer);
+        return this;
+    }
+
+    /**
      * Register a class for serialization/deserialization.
      */
     public <T> KalynxSerializer register(Class<T> clazz) throws Throwable {
@@ -58,20 +67,15 @@ public class KalynxSerializer {
         if (obj == null) {
             throw new IllegalArgumentException("Cannot serialize null object");
         }
-
-        BinarySerializer<T> serializer = (BinarySerializer<T>) registry.getSerializer(obj.getClass());
+        Serializer<T> serializer = (Serializer<T>) registry.getSerializer(obj.getClass());
         return serializer.serialize(obj);
     }
 
-    /**
-     * Deserialize bytes into an object of the specified type.
-     */
     public <T> T deserialize(byte[] bytes, Class<T> clazz) throws Throwable {
         if (bytes == null || bytes.length == 0) {
             throw new IllegalArgumentException("Cannot deserialize null or empty bytes");
         }
-
-        BinaryDeserializer<T> deserializer = registry.getDeserializer(clazz);
+        Deserializer<T> deserializer = registry.getDeserializer(clazz);
         return deserializer.deserialize(bytes);
     }
 
